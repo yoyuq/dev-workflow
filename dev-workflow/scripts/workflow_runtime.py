@@ -41,6 +41,7 @@ def validate_config(config):
     for field in ("attempt_seconds", "no_progress_seconds", "max_output_bytes"):
         checks.integer(config["limits"][field], "runtime.limits." + field)
     checks.require(config["limits"]["no_progress_seconds"] <= config["limits"]["attempt_seconds"], "no-progress limit exceeds attempt limit")
+    checks.require(config.get('watchdog_policy', 'artifact') in ('artifact', 'read-tools'), 'unknown watchdog policy')
     if "worker_preflight_seconds" in config:
         checks.integer(config["worker_preflight_seconds"], "worker_preflight_seconds")
     for path in config.get("protected_files", []):
@@ -155,6 +156,24 @@ def normalize(event):
     return result
 
 
+def completed_read_tools(event):
+    """Successful SDK tool completions only; reasoning/heartbeat/error is not progress."""
+    if not isinstance(event, dict):
+        return []
+    item = event.get('item')
+    if event.get('type') == 'item.completed' and isinstance(item, dict):
+        key = item.get('id')
+        if isinstance(key, str) and 0 < len(key) <= 256 and item.get('type') == 'command_execution' and item.get('status') == 'completed' and type(item.get('exit_code')) is int and item['exit_code'] == 0:
+            return [('codex', key)]
+    if event.get('type') == 'user' and isinstance(event.get('message'), dict):
+        results = event['message'].get('content')
+        if isinstance(results, list):
+            return [('claude', block['tool_use_id']) for block in results if isinstance(block, dict)
+                    and block.get('type') == 'tool_result' and block.get('is_error', False) is False
+                    and isinstance(block.get('tool_use_id'), str) and 0 < len(block['tool_use_id']) <= 256]
+    return []
+
+
 def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, cancel_path, on_start=lambda pid: None):
     output.mkdir(parents=True, exist_ok=False)
     start = time.monotonic()
@@ -166,9 +185,12 @@ def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, ca
     env = os.environ.copy()
     env.update(PYTHONUTF8="1", PYTHONDONTWRITEBYTECODE="1")
     limit = min(config["limits"]["attempt_seconds"], remaining)
+    policy = config.get('watchdog_policy', 'artifact')
+    seen_tools = set()
     record = {"started_at": now(), "reason": "exited", "first_artifact_seconds": None,
               "workspace_change_observations": 0, "event_count": 0, "permission_denials": 0,
-              "reported_model": None, "harness_error": False}
+              "reported_model": None, "harness_error": False,
+              "watchdog_policy": policy, "successful_tool_observations": 0}
     creation = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     process = subprocess.Popen(command(config, repo, skill_root), cwd=repo, env=env,
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -228,7 +250,14 @@ def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, ca
                     if name == "stdout":
                         record["event_count"] += 1
                         try:
-                            metadata = normalize(json.loads(data))
+                            event = json.loads(data)
+                            if policy == 'read-tools':
+                                for tool in completed_read_tools(event):
+                                    if tool not in seen_tools and len(seen_tools) < 5000:
+                                        seen_tools.add(tool)
+                                        last_change = time.monotonic()
+                                        record['successful_tool_observations'] += 1
+                            metadata = normalize(event)
                             record["permission_denials"] += int(metadata.pop("permission_denied", False))
                             event_error = metadata.pop("harness_error", False)
                             record["harness_error"] = record["harness_error"] or event_error

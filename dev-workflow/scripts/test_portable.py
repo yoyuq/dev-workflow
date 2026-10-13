@@ -21,7 +21,7 @@ class PortableTests(unittest.TestCase):
     def test_published_package_has_one_entry_and_eight_preserved_modules(self):
         info = portable.check_package()
         self.assertEqual(info["modules"], 8)
-        self.assertEqual(info["version"], "2.12.3")
+        self.assertEqual(info["version"], "2.13.0")
 
     def test_install_spaces_unicode_and_repeat_is_idempotent(self):
         dest = self.root / "项目 with spaces" / "dev-workflow"

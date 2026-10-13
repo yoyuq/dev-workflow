@@ -4,7 +4,7 @@
 
 适用于 **Codex 和 Claude Code** 的统一开发工作流。安装一个 Skill，描述目标，由 AI 先对齐需求、拆模块和任务、写执行计划，再实施、验证，并根据结果继续推进。
 
-当前版本 **2.12.3，开发预览版**。包含八个任务技能模块，以及可选的 Python 总控、独立执行服务和动态流程图。
+当前版本 **2.13.0，开发预览版**。包含八个任务技能模块，以及可选的 Python 总控、独立执行服务和动态流程图。
 
 ## 能做什么
 
@@ -83,3 +83,8 @@ python dev-workflow/scripts/workflow.py self-test --output ../workflow-demo
 原工作流代码、文档和作者自定义模块使用 [MIT](LICENSE)。内置第三方模块保留原有 MIT/Apache-2.0 许可和署名，见 [NOTICE](NOTICE.md)、[来源记录](dev-workflow/THIRD_PARTY.md) 与 [许可证全文](dev-workflow/licenses/)。第三方内容是保留的本地快照，未确定对应的精确上游 commit；本项目与这些作者、OpenAI 和 Anthropic 无隶属关系。
 
 欢迎提交可复现的 Issue 或 PR，要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。不要在问题报告中附令牌、密钥或私人项目数据。
+
+
+## 2.13 的真实运行指标与审阅修复
+
+`python dev-workflow/scripts/workflow.py metrics --run-dir RUN` 只读汇总模型进程耗时与 SDK 用量，并明确中断造成的缺失；未知账单、宿主救援不按零处理。详情见 [metrics.md](dev-workflow/references/metrics.md)。只读审阅的成功工具完成可更新空闲计时，思考/心跳/失败/重复事件不算进度，实现者仍使用产物看护，总预算与验收保持。

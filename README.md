@@ -4,7 +4,7 @@
 
 A portable development workflow for **Codex and Claude Code**. Install one Skill, describe your goal, and let the agent align requirements, plan concrete tasks, implement, verify, and continue from the results.
 
-The Skill includes eight task-specific modules and an optional Python controller for resumable work, coordinated Git branches, and a live dependency graph. **Version: 2.12.3 — developer preview.**
+The Skill includes eight task-specific modules and an optional Python controller for resumable work, coordinated Git branches, and a live dependency graph. **Version: 2.13.0 — developer preview.**
 
 ## What it does
 
@@ -102,6 +102,16 @@ python dev-workflow/scripts/workflow_portable.py doctor
 ```
 
 The 2.12.2 development baseline passed 295 Python tests with one Windows symlink-permission skip, plus the dashboard checks. [GitHub Actions](https://github.com/yoyuq/dev-workflow/actions) runs the repository checks on Linux and Windows; see each run for its actual result. Automated tests use fixtures/simulated workers, not paid model calls.
+
+## Measure a real run
+
+```sh
+python dev-workflow/scripts/workflow.py metrics --run-dir ../my-run
+```
+
+This reads saved SDK usage and process timings without making model calls. Cached input is kept as a subset; missing usage from interrupted processes stays unknown. Provider-reported cost is separate from an actual invoice. Host rescue actions need an operator journal; absence of records does not prove zero intervention. See [metrics](dev-workflow/references/metrics.md).
+
+Version 2.13 also fixes the reviewer idle watchdog: distinct successful SDK tool completions count as read-only review activity. Reasoning, heartbeats, failures, and duplicate events do not extend idle time. Worker artifact tracking, hard time limits, acceptance checks, and independent review remain in place.
 
 ## Documentation
 

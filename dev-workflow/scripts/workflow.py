@@ -87,6 +87,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     onboarding.add_commands(commands)
+    metric_parser = commands.add_parser("metrics")
+    metric_parser.add_argument("--run-dir", required=True, type=Path)
     for name in ("init", "run", "status", "report", "requests", "respond", "replan", "recover", "cancel", "clear-cancel", "retry-review"):
         p = commands.add_parser(name)
         p.add_argument("--run-dir", required=True, type=Path)
@@ -100,6 +102,10 @@ def main(argv=None):
     try:
         if args.command in {"doctor", "setup", "self-test"}:
             return onboarding.dispatch(args)
+        if args.command == "metrics":
+            import workflow_metrics
+            print(json.dumps(workflow_metrics.collect(args.run_dir), ensure_ascii=False, indent=2))
+            return 0
         root = args.run_dir.resolve()
         if args.command == "init":
             initialize(args.plan.resolve(), args.runtime.resolve(), root, args.mode)

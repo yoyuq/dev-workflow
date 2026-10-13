@@ -12,6 +12,7 @@
 workflow.py init --plan PLAN --runtime RUNTIME --run-dir RUN --mode quick
 workflow.py run --run-dir RUN
 workflow.py status --run-dir RUN
+workflow.py metrics --run-dir RUN
 workflow.py report --run-dir RUN
 workflow.py requests --run-dir RUN
 workflow.py respond --run-dir RUN --input RESPONSE

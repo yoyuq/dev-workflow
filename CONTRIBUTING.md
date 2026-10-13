@@ -6,7 +6,7 @@ For changes, open a focused branch and describe the problem, resulting behavior,
 
 ## Package integrity
 
-The installable Skill is `dev-workflow/`. The repository-level documentation, CI, and additional notices are outside that directory so package integrity checks cover only the installable Skill. The 2.12.3 public preview preserves the 2.12.2 runtime implementation and canonicalizes one Windows test fixture, with a version/manifest refresh. Third-party snapshots remain unchanged.
+The installable Skill is `dev-workflow/`. The repository-level documentation, CI, and additional notices are outside that directory so package integrity checks cover only the installable Skill. Version 2.13 adds usage metrics and a bounded reviewer tool-activity watchdog. Existing runs keep their frozen package. Third-party snapshots remain unchanged.
 
 `dev-workflow/package-manifest.json` hashes every package file except itself. If you change the Skill, deliberately update the manifest's file hashes and version, the version in `SKILL.md`, and affected version assertions. Run `workflow_portable.py doctor` and the full relevant checks before publishing a new version. Do not silently edit a frozen package or existing run's pinned Skill.
 

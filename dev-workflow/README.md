@@ -72,3 +72,8 @@ doctor 默认只检查包、Python、Git、CLI 和项目基线。`--live` **会�
 ## 语言 / Language
 
 默认英文；本机可选中文。首次使用时告诉 AI “这套工作流使用中文”，或运行 `python scripts/workflow_locale.py --set zh-CN`。看板右上角切换并记住浏览器语言；任务输出沿用本地偏好或计划的 `locale`。[完整规则](references/language.md)。个人偏好不打进安装包。
+
+
+## 记录真实耗时与用量
+
+`python scripts/workflow.py metrics --run-dir RUN` 只读汇总 worker、reviewer、coordinator 的进程耗时、SDK usage 与缺失覆盖率；不会调用模型。中断可能没有完整 usage，未知费用保留 null。缓存输入、推理输出分别保留，不重复加到总 token。真实账单与宿主聊天用量不能从这些日志取得；实际用户决定、宿主救援和计划故障演练需另写操作记录。详见 [metrics.md](references/metrics.md)。

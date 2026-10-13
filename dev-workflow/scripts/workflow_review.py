@@ -20,7 +20,10 @@ def prepare_context(plan, state, head, task_id, workspace, folder, baseline=None
     integration = task_id == "integration"
     selected = plan["tasks"] if integration else [t for t in plan["tasks"] if t["id"] == task_id]
     entry = {} if integration else state["tasks"][task_id]
-    base = plan["base_commit"] if integration else entry.get("launch_base", plan["base_commit"])
+    base = plan.get('review', {}).get('base_commit', plan['base_commit']) if integration else entry.get("launch_base", plan["base_commit"])
+    if integration:
+        checks.require(coord.git(workspace, 'merge-base', base, plan['base_commit']) == base,
+                       'whole-branch review base is not an ancestor of the run baseline')
     # A launch base, not a file filter: callers may inspect every affected dependency.
     checks.require(coord.git(workspace, "merge-base", base, head) == base, "review base is not an ancestor")
     patch = coord.git(workspace, "diff", "--no-ext-diff", "--no-textconv", base, head, "--")
@@ -215,7 +218,10 @@ def evaluate(root, plan, state, bus, config, head, task_id, remaining):
     before = coord.source_snapshot(workspace, plan["tasks"])
     available = remaining - (time.monotonic() - started)
     checks.require(available > 0, "review budget exhausted during preparation")
-    result = coord.supervised_worker(root, "review-" + token, config, folder, Path(plan["skill_root"]), prompt,
+    # Reviewers can make progress before writing their final report. This resets
+    # idle only, preserving runtime pins, the hard budget and worker artifact policy.
+    review_config = {**config, 'watchdog_policy': 'read-tools'}
+    result = coord.supervised_worker(root, "review-" + token, review_config, folder, Path(plan["skill_root"]), prompt,
         folder / "process", lambda: checks.digest(folder / "report.json") if (folder / "report.json").exists() else "",
         available, root / "cancel.request", on_start=lambda pid: None)
     coord.load(root)

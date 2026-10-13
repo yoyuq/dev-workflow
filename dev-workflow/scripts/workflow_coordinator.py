@@ -58,6 +58,10 @@ def validate(plan):
     checks.require(limits.get("cost_limit") is None, "provider-independent billing cap is unsupported")
     if plan.get("review"):
         checks.integer(plan["review"]["max_rounds"], "review.max_rounds")
+        if 'base_commit' in plan['review']:
+            value = plan['review']['base_commit']
+            checks.require(isinstance(value, str) and len(value) in (40, 64) and all(c in '0123456789abcdef' for c in value),
+                           'review.base_commit must be a full commit SHA')
     tasks = {}
     producers = {}
     for task in plan["tasks"]:

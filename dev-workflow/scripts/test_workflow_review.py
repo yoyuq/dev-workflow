@@ -58,6 +58,23 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual([r["binding"]["task_id"] for r in state["review_history"]], ["A", "integration"])
         self.assertTrue(all(Path(r["report_path"]).is_file() for r in state["review_history"]))
 
+    def test_followup_whole_review_can_include_a_pinned_earlier_baseline(self):
+        base = Path(self.temp.name).resolve()
+        plan, root = fixture(base)
+        repo = Path(plan['repository'])
+        original = plan['base_commit']
+        (repo/'prior.txt').write_text('authorized preceding result',encoding='utf-8')
+        coord.git(repo,'add','prior.txt');coord.git(repo,'commit','-m','prior accepted work')
+        newer = coord.git(repo,'rev-parse','HEAD')
+        plan['base_commit'] = newer
+        plan['review'] = {'max_rounds':3,'base_commit':original}
+        folder=base/'review-context';folder.mkdir()
+        state=Bus(root).state()
+        context=review.prepare_context(plan,state,newer,'integration',repo,folder)
+        self.assertEqual(context['base_commit'],original)
+        self.assertEqual(context['project_base_commit'],newer)
+        self.assertIn('prior.txt',(folder/'changes.patch').read_text(encoding='utf-8'))
+
     def test_blocking_review_returns_to_worker_with_feedback(self):
         code, state = self.execute("reject_first")
         self.assertEqual(code, 0)

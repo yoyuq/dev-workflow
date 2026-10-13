@@ -34,6 +34,22 @@ class EntrypointTests(unittest.TestCase):
         self.assertEqual(snapshot["task_counts"], {"integrated": 1})
         self.assertEqual(checks.read_json(base / "new-plan.json"), plan)
 
+    def test_metrics_entrypoint_reads_an_unstarted_run_without_mutating_state(self):
+        import contextlib
+        import io
+        import json
+        base, plan = self.prepare()
+        root = base / "metrics-run"
+        workflow.initialize(base / "new-plan.json", base / "runtime.json", root, "quick")
+        before = checks.read_json(root / "state.json")
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(workflow.main(["metrics", "--run-dir", str(root)]), 0)
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["configured_model_process_count"], 0)
+        self.assertIsNone(result["money"]["actual_invoice_total"])
+        self.assertEqual(checks.read_json(root / "state.json"), before)
+
     def test_full_requires_reviewer_before_branch_creation(self):
         base, plan = self.prepare()
         root = base / "unified"
