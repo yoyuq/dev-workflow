@@ -167,6 +167,11 @@ def normalize(event):
         hint = failure_hint(json.dumps(event, ensure_ascii=False))
         if hint and hint != 'permission': result['environment_failure'] = hint
         elif hint == 'permission': result['permission_denied'] = True
+        message = event.get('message')
+        if (event.get('type') == 'error' and isinstance(message, str) and
+                message.startswith('Reconnecting...') and 'stream disconnected before completion' in message and
+                not result.get('environment_failure') and not result.get('permission_denied')):
+            result['retrying_stream'] = True
     if event.get("type") == "system" and event.get("subtype") == "permission_denied":
         result["permission_denied"] = True
     return result
@@ -203,6 +208,7 @@ def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, ca
     limit = min(config["limits"]["attempt_seconds"], remaining)
     policy = config.get('watchdog_policy', 'artifact')
     seen_tools = set()
+    terminal_error, pending_stream_error = False, False
     record = {"started_at": now(), "reason": "exited", "first_artifact_seconds": None,
               "workspace_change_observations": 0, "event_count": 0, "permission_denials": 0,
               "reported_model": None, "harness_error": False,
@@ -279,7 +285,18 @@ def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, ca
                             metadata = normalize(event)
                             record["permission_denials"] += int(metadata.pop("permission_denied", False))
                             event_error = metadata.pop("harness_error", False)
-                            record["harness_error"] = record["harness_error"] or event_error
+                            retrying = metadata.pop('retrying_stream', False)
+                            if event_error:
+                                if retrying:
+                                    pending_stream_error = True
+                                    record['stream_retry_events'] = record.get('stream_retry_events', 0) + 1
+                                else: terminal_error = True
+                            usage = event.get('usage')
+                            if (event.get('type') == 'turn.completed' and isinstance(usage, dict) and
+                                    all(type(usage.get(k)) is int and usage[k] >= 0 for k in ('input_tokens', 'output_tokens'))):
+                                if pending_stream_error: record['recovered_stream_retry_events'] = record.get('stream_retry_events', 0)
+                                pending_stream_error = False
+                            record['harness_error'] = terminal_error or pending_stream_error
                             record.update({k: v for k, v in metadata.items() if v is not None})
                         except (ValueError, TypeError, AttributeError):
                             pass

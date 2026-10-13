@@ -4,7 +4,7 @@
 
 A portable development workflow for **Codex and Claude Code**. Install one Skill, describe your goal, and let the agent align requirements, plan concrete tasks, implement, verify, and continue from the results.
 
-The Skill includes eight task-specific modules and an optional Python controller for resumable work, coordinated Git branches, and a live dependency graph. **Version: 2.14.0 — developer preview.**
+The Skill includes eight task-specific modules and an optional Python controller for resumable work, coordinated Git branches, and a live dependency graph. **Version: 2.14.1 — developer preview.**
 
 ## What it does
 
@@ -142,3 +142,5 @@ The controller is not an operating-system sandbox, and provider billing limits r
 Original workflow code, documentation, and the author's custom modules are [MIT licensed](LICENSE). Bundled third-party modules keep their respective **MIT or Apache-2.0** terms, copyright notices, and attributions; they are not relicensed by the root license. See [NOTICE.md](NOTICE.md), the preserved [source list](dev-workflow/THIRD_PARTY.md), and [license texts](dev-workflow/licenses/).
 
 Thanks to [Matt Pocock](https://github.com/mattpocock/skills), [Leonxlnx](https://github.com/Leonxlnx/taste-skill), [Paul Bakaus](https://github.com/pbakaus/impeccable), and [ehmo](https://github.com/ehmo/platform-design-skills). Bundled modules are preserved local snapshots; their precise upstream commits are not known. This project is independent of those authors, OpenAI, and Anthropic.
+
+Version 2.14.1 also recognizes the observed SDK reconnect event as pending: a valid successful turn can resolve it, while terminal/account/permission failures and incomplete or malformed completion remain blocking. This avoids unnecessary worker retries after a recovered stream. Native case snapshots remain unchanged.

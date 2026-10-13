@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "name": "dev-workflow",
-  "version": "2.14.0",
+  "version": "2.14.1",
   "night_plan_format_version": 4,
   "snapshot_date": "2026-10-13",
   "files": {
@@ -35,7 +35,7 @@
     "README.md": "3c631cc8874ffbd6f54f3d1d39c2d7b62487440f565b23efdd230b1e684e50d7",
     "references/acceptance.md": "1c3e9da5065d5cb9bab8cef0e9d51c5392fc381f3dae50cae8fb79b50fac76d6",
     "references/agent-loop.md": "57d4e0f06770686a0c5532c5d009873fd72076d0f2030c8e1c5967a74ff95fbb",
-    "references/automatic-assurance.md": "a86b1bc5463cf837ad3218638c24cbbc495e63c34439e9394e4145f6e3e7426b",
+    "references/automatic-assurance.md": "e944243e54696f3a109426db6e7a3e1a482d6e0c1b5389cb64be650441050caf",
     "references/benchmarks.md": "c4385be313b73479b5c67d569c54a7abcf76617d398d34b7f56dfbc6eff9fa91",
     "references/browser-validation.md": "e6e9d94c1cf88a8c6d68f36e5e146b04497d4570d03bf108067fed235faa1d1d",
     "references/checker.md": "2e7c168f422bc19231bca55569741c19d9d91cf7a528385f643b840b97e0df5c",
@@ -146,7 +146,8 @@
     "scripts/test_dashboard_motion.cjs": "4a1266c481ea9dcb982ef129f2d0f41207040b54fa80a09330edd7b38a60ec00",
     "scripts/test_dashboard_titles.cjs": "467bdaa48f6c0c3499691f4cbe265a1c8ad5b88188370324a2f599fc88cd79ec",
     "scripts/test_plan_contract.py": "b9fc4de44d83f6af2b287ee70e82183087b066402e65767e4876fa0ec6e806ac",
-    "scripts/test_portable.py": "4fb18bf31fe142244bc0a6063a977fd8fc34e77516cd030bd96ae7c057816607",
+    "scripts/test_portable.py": "cca60b9d14f643b475939d9a8d0203b198732d7374d0cd20ab436aaad63045fd",
+    "scripts/test_recovered_sdk_stream.py": "3412348806e88ed3ccff8b223f94e2e1e14d94448b42f4ce842fe93fcd370110",
     "scripts/test_requirements_alignment.py": "28801fcf6caafed3496b510c0ec33023c63f0343fedb9a6dec16c40737e6c316",
     "scripts/test_review_watchdog.py": "a4995db41f328a6575d3d9eb7912e3517d7b6d66af88de04b2ebd42238af269b",
     "scripts/test_workflow_coordinator.py": "18a7a3544141b8f143f6dae433d213d3df3c2dd8784ec4bc4dc9314b2385d6ea",
@@ -185,12 +186,12 @@
     "scripts/workflow_replan.py": "a248be97cc7a8b4782bd1f25493cf26204528f296393a34f970b696f95a5c49b",
     "scripts/workflow_review.py": "524cebbd2b07f9e5ac026dd7726a2c1b93ed96099570706bbe4e33f4a5682b74",
     "scripts/workflow_runner.py": "3698c7fc66ee7654520bba9baf95ff28dce8d6b9916f5305a5ea78beda3bf4e4",
-    "scripts/workflow_runtime.py": "3962be92ec918d727e251dad1fdfdd772b52fc8d06abd25db81ed2e8c757fe82",
+    "scripts/workflow_runtime.py": "1770db0dca65d227f742d5c8eb07f1857fd52b61207231fd5b8fde24848c4f27",
     "scripts/workflow_self_test.py": "50471422db79f479776f5e5484a7e56fb4a967dddfb2ff87ebea89609e1187dd",
     "scripts/workflow_service.py": "b209ddcb8e395c74ba549491fce82b0c71eef920566d9a4470ba2d14b95e453d",
     "scripts/workflow_session.py": "f792001b976cdeb48d8bb14889e88dd139f187ba3e35b9c8fabc7b85b5802382",
     "scripts/workflow_titles.py": "b63416f2c94b8241e22a0faefbf944f6cb768ebafd05b5cd96127db06c9542a7",
-    "SKILL.md": "d42f28acc26d1c001bf27fe2530359191abd8666073d82af879615fe48cd970a",
+    "SKILL.md": "067d4cc61e3508bdf17caee28bd68ab183a7dc01a5db0bf55ec2ced5a312af61",
     "THIRD_PARTY.md": "0985fab06412bfdc95285eab5cdeecb20778ee276bb9f1cce592e82dd9efd53a"
   },
   "coordination_plan_format_version": 2
