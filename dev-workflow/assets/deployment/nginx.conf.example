@@ -1,0 +1,8 @@
+# Place inside a server block with your actual TLS certificate and hostname.
+# The API still requires its Bearer token. Never expose port 8765 publicly.
+location / {
+    proxy_pass http://127.0.0.1:8765;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    client_max_body_size 64k;
+}

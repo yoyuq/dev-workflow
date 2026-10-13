@@ -1,0 +1,15 @@
+{
+  "id": "prepare-api-fixture",
+  "expected_revision": 0,
+  "reason": "Replace with observed evidence for splitting an implementation prerequisite within the confirmed API scope.",
+  "add": [{
+    "id": "API-PREP",
+    "parent": "API",
+    "title": "准备接口样例",
+    "goal": "Prepare an API fixture within the already authorized task scope",
+    "allowed_scope": ["src/api/fixture.py"],
+    "checks": ["api-fixture-prepared"],
+    "depends_on": []
+  }],
+  "dependencies": {}
+}

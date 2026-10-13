@@ -1,0 +1,53 @@
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-and-tests:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: '3.10'
+          - os: windows-latest
+            python: '3.14'
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Check frozen package and module digests
+        run: python -X utf8 -B dev-workflow/scripts/workflow_portable.py doctor
+      - name: Python behavioral tests (simulated workers; no model calls)
+        run: python -X utf8 -B -m unittest discover -s dev-workflow/scripts -q
+      - name: Dashboard language tests
+        run: node --test dev-workflow/scripts/test_dashboard_i18n.cjs
+      - name: Dashboard motion tests
+        run: node --test dev-workflow/scripts/test_dashboard_motion.cjs
+      - name: Dashboard title tests
+        run: node dev-workflow/scripts/test_dashboard_titles.cjs
+      - name: Exercise isolated Git branches and delivery reports
+        run: python -X utf8 -B dev-workflow/scripts/workflow.py self-test --output ../workflow-demo-ci

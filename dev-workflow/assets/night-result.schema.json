@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_id", "status", "branch", "commits", "completed_task_ids", "checks", "pending_tasks", "summary"],
+  "properties": {
+    "run_id": {"type": "string", "minLength": 1},
+    "status": {"type": "string", "enum": ["completed", "partial", "blocked", "failed", "timeboxed"]},
+    "branch": {"type": ["string", "null"]},
+    "commits": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "completed_task_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task_id", "check_id", "action", "result", "evidence"],
+        "properties": {
+          "task_id": {"type": "string", "minLength": 1},
+          "check_id": {"type": "string", "minLength": 1},
+          "action": {"type": "string", "minLength": 1},
+          "result": {"type": "string", "enum": ["passed", "failed", "not_run"]},
+          "evidence": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "pending_tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task_id", "status", "reason", "next_action"],
+        "properties": {
+          "task_id": {"type": "string", "minLength": 1},
+          "status": {"type": "string", "enum": ["pending", "blocked", "failed", "timeboxed", "awaiting_review"]},
+          "reason": {"type": "string", "minLength": 1},
+          "next_action": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "summary": {"type": "string", "minLength": 1}
+  }
+}

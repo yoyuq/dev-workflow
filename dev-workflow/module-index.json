@@ -1,0 +1,445 @@
+{
+  "format_version": 1,
+  "modules": [
+    {
+      "id": "grill-me",
+      "entry": "references/modules/grill-me/guide.md",
+      "origin": "https://github.com/mattpocock/skills",
+      "snapshot": "user-installed files, 2026-10-09",
+      "upstream_commit": null,
+      "modifications": "SKILL.md renamed to guide.md; content bytes preserved; runtime adapter rules are separate.",
+      "files": [
+        {
+          "original_path": "SKILL.md",
+          "path": "guide.md",
+          "sha256": "74147eb6010a65957efef2b9e0f0b3ff935c1def7fc117697151b1d0f3610556"
+        }
+      ]
+    },
+    {
+      "id": "design-taste-frontend",
+      "entry": "references/modules/design-taste-frontend/guide.md",
+      "origin": "https://github.com/Leonxlnx/taste-skill",
+      "snapshot": "user-installed files, 2026-10-09",
+      "upstream_commit": null,
+      "modifications": "SKILL.md renamed to guide.md; content bytes preserved; runtime adapter rules are separate.",
+      "files": [
+        {
+          "original_path": "SKILL.md",
+          "path": "guide.md",
+          "sha256": "aa194351b246b8b4799099d4ed7b033d29eab6e6e3d58d8d2172978be7b3ec89"
+        }
+      ]
+    },
+    {
+      "id": "impeccable",
+      "entry": "references/modules/impeccable/guide.md",
+      "origin": "https://github.com/pbakaus/impeccable",
+      "snapshot": "user-installed files, 2026-10-09",
+      "upstream_commit": null,
+      "modifications": "SKILL.md renamed to guide.md; content bytes preserved; runtime adapter rules are separate.",
+      "files": [
+        {
+          "original_path": "agents/impeccable_asset_producer.toml",
+          "path": "agents/impeccable_asset_producer.toml",
+          "sha256": "37080ea5e5b381adb7eae7a427231b0ad0dee0f0916fc1d6b673b7101a5b425b"
+        },
+        {
+          "original_path": "agents/impeccable_documenter.toml",
+          "path": "agents/impeccable_documenter.toml",
+          "sha256": "2feb3768125ba6469c92a50d516727e6d42f44579165ddfd33409948e2a3803d"
+        },
+        {
+          "original_path": "agents/impeccable_finish_reviewer.toml",
+          "path": "agents/impeccable_finish_reviewer.toml",
+          "sha256": "869fa5390b84bfd00d072f5280a9002ea3e3936edf5985241be641a87f03ff7b"
+        },
+        {
+          "original_path": "agents/impeccable_manual_edit_applier.toml",
+          "path": "agents/impeccable_manual_edit_applier.toml",
+          "sha256": "6c9ce3e27ec4520ead001da3aad2a2ebba481c4e5cd22873db8890259ee579fe"
+        },
+        {
+          "original_path": "agents/openai.yaml",
+          "path": "agents/openai.yaml",
+          "sha256": "cbd8bd68fa00935dd0f179adb169252629cf7ee443ea9dc7db77e7ef2cf77446"
+        },
+        {
+          "original_path": "reference/adapt.md",
+          "path": "reference/adapt.md",
+          "sha256": "871a8e4d749b807c693ebabd83defbd6c76e1bd2a0f53a28a460cb1308ba8634"
+        },
+        {
+          "original_path": "reference/adapt.native.md",
+          "path": "reference/adapt.native.md",
+          "sha256": "6acc0bf221a4ddc6e5c6438348920b2ca2393b29c4314dbde2cdc23f2b1a9639"
+        },
+        {
+          "original_path": "reference/android.md",
+          "path": "reference/android.md",
+          "sha256": "058f81f256134841875fd3183e06b37a023de0c877fd2b9eecd97011640791fe"
+        },
+        {
+          "original_path": "reference/animate.md",
+          "path": "reference/animate.md",
+          "sha256": "d658c48ffbe0031e8e3b318996cad6ceafe29e40aa50d5bb25e4bf1d6839dc7c"
+        },
+        {
+          "original_path": "reference/audit.md",
+          "path": "reference/audit.md",
+          "sha256": "d5f83912eda93d42f93522bb74aeff0ea04d9c559577ec52fcccc130dd03166d"
+        },
+        {
+          "original_path": "reference/audit.native.md",
+          "path": "reference/audit.native.md",
+          "sha256": "960cb922bc934adbf9192e9428ff6bec1f382038166f02a785939c93b7391067"
+        },
+        {
+          "original_path": "reference/bolder.md",
+          "path": "reference/bolder.md",
+          "sha256": "f964506c0fae87b3c2c1db7016ddc9be9ef970bbcf5548d684b997b5d5991586"
+        },
+        {
+          "original_path": "reference/clarify.md",
+          "path": "reference/clarify.md",
+          "sha256": "173dd66abe65633910dcb04a51f40d6ff2a793f87088f022a02fc4cad24dd133"
+        },
+        {
+          "original_path": "reference/colorize.md",
+          "path": "reference/colorize.md",
+          "sha256": "bc5f71f1129d0f2c310d913d07c8dc609a1d25644121bd78c308f42d52a0b9e9"
+        },
+        {
+          "original_path": "reference/craft-floor.md",
+          "path": "reference/craft-floor.md",
+          "sha256": "e802e4f7bdc89050a9c0f2ca506e1d493a2316e6e810c0336c57aa073717ef3e"
+        },
+        {
+          "original_path": "reference/craft.md",
+          "path": "reference/craft.md",
+          "sha256": "9205e222bc6565b37fb504ceec93233c2d2a456802b69d16e6b1c44723907c4c"
+        },
+        {
+          "original_path": "reference/critique.md",
+          "path": "reference/critique.md",
+          "sha256": "cb8caddbb3919e5bf7f252143b519fb16db28a244642d937b186cb89962d9201"
+        },
+        {
+          "original_path": "reference/degraded/asset-producer.md",
+          "path": "reference/degraded/asset-producer.md",
+          "sha256": "a8547c8565979894f0c07f92a96ac2a38e681a31fbf155ffeefc7566e185d9c2"
+        },
+        {
+          "original_path": "reference/degraded/documenter.md",
+          "path": "reference/degraded/documenter.md",
+          "sha256": "bcc05ea92faebb5c74037a9d4263a5ce9a56f5ab07c8ab3c59ee704d8cade745"
+        },
+        {
+          "original_path": "reference/degraded/finish-reviewer.md",
+          "path": "reference/degraded/finish-reviewer.md",
+          "sha256": "5f24c5a97b4ffcabc7c432b064cfdd04c7a2ad52f52e765be648dc0aadab8f38"
+        },
+        {
+          "original_path": "reference/degraded/manual-edit-applier.md",
+          "path": "reference/degraded/manual-edit-applier.md",
+          "sha256": "5fae7f8a2fc3ddd49ad0a413446dc44daedef5b6b7de5eb935bd2fbfad646d58"
+        },
+        {
+          "original_path": "reference/delight.md",
+          "path": "reference/delight.md",
+          "sha256": "098a891028ce59c212b747d3c70468dd750aff7053a703d1336045ed31e0da7c"
+        },
+        {
+          "original_path": "reference/distill.md",
+          "path": "reference/distill.md",
+          "sha256": "ea8432c90c30ecb0426662a681ead5c0941113079704e1a766cda09e85b15b4f"
+        },
+        {
+          "original_path": "reference/doctor.md",
+          "path": "reference/doctor.md",
+          "sha256": "a98b397cedeeaa1da57f3395b3d9b6c1fc477f4247fb9dc13e4da3da588283ff"
+        },
+        {
+          "original_path": "reference/document.md",
+          "path": "reference/document.md",
+          "sha256": "3673248740bcdd1122ccc610093ba2fe52f3943a61ce0b7170b74dc49e5b6098"
+        },
+        {
+          "original_path": "reference/extract.md",
+          "path": "reference/extract.md",
+          "sha256": "31b90048c0b540daec46762a10c2b6b6434737a89af005054d8b848d829d003b"
+        },
+        {
+          "original_path": "reference/generate.md",
+          "path": "reference/generate.md",
+          "sha256": "53628d05b7eff0d4f48b95e48fad40266452fe1b42f398bd88dd9328353e0dd8"
+        },
+        {
+          "original_path": "reference/harden.md",
+          "path": "reference/harden.md",
+          "sha256": "16ba7fca1973c5faf53dd2ca523559129c0fe9e5f8d50b645f527afa78186cd2"
+        },
+        {
+          "original_path": "reference/hooks.md",
+          "path": "reference/hooks.md",
+          "sha256": "12fefe52d80d25014e5f7e2f9b278275a675653d3d99ae8f0ecf344cdb9abbe6"
+        },
+        {
+          "original_path": "reference/init.md",
+          "path": "reference/init.md",
+          "sha256": "bb069b43c09109d7031b0374e31955749fec657b252d39782f11e8985aca2b51"
+        },
+        {
+          "original_path": "reference/ios.md",
+          "path": "reference/ios.md",
+          "sha256": "40c87038b5f75147a5952a96237acf312a327bf70c1bcd8e0a5f064625ae9668"
+        },
+        {
+          "original_path": "reference/layout.md",
+          "path": "reference/layout.md",
+          "sha256": "0bc7d7971b3edf2acd0580e847458dc6d84129d90715b452799ace3bed815c7c"
+        },
+        {
+          "original_path": "reference/live-setup.md",
+          "path": "reference/live-setup.md",
+          "sha256": "2b5b2fbf5f658f34ea1997fb1aeebe01604d05187f75c6a4f1f55a5bc78520a4"
+        },
+        {
+          "original_path": "reference/live.md",
+          "path": "reference/live.md",
+          "sha256": "68c5636a7858dd0b5137a9229c15e25fdc2ee40a0f8a4e9d809f78e809256262"
+        },
+        {
+          "original_path": "reference/new-work.md",
+          "path": "reference/new-work.md",
+          "sha256": "85b9c2d051de94ee9129c58be111946f73035ca62bbd2a3936f4fa48768fe5cf"
+        },
+        {
+          "original_path": "reference/onboard.md",
+          "path": "reference/onboard.md",
+          "sha256": "ef2dde00030580ed2765cbf7be9b2ea4a6f64cb915b804fd6f6abcf38051c7b9"
+        },
+        {
+          "original_path": "reference/operate.md",
+          "path": "reference/operate.md",
+          "sha256": "a9d2203acd45ca33a13d5c68b02b23ed512425ac15f0e8438318ed124b43729d"
+        },
+        {
+          "original_path": "reference/optimize.md",
+          "path": "reference/optimize.md",
+          "sha256": "f672ef8251a3ed4051a053d30819664951b17540b2899acd27d20e500c234abc"
+        },
+        {
+          "original_path": "reference/overdrive.md",
+          "path": "reference/overdrive.md",
+          "sha256": "fce6688138d2ceb1e3d2cde5231f54b1d8dc8748b4c95a7919aa83b6f924cf96"
+        },
+        {
+          "original_path": "reference/polish.md",
+          "path": "reference/polish.md",
+          "sha256": "81666fc7f783b4e3514db6554e713dc0479bd9cdedb06e93d15f8b579aae869a"
+        },
+        {
+          "original_path": "reference/quieter.md",
+          "path": "reference/quieter.md",
+          "sha256": "190a4e642ca362d7499f3c3ab123e21f18f75457d11f072b545a183f296e6495"
+        },
+        {
+          "original_path": "reference/routing.md",
+          "path": "reference/routing.md",
+          "sha256": "77ae09542fbc10aa4e8b119d6fd19359908a47c13c30068d6a150bfdb50e3e10"
+        },
+        {
+          "original_path": "reference/shape.md",
+          "path": "reference/shape.md",
+          "sha256": "a55f016c046cb6a27c55bd7f346375aeb506a755c4fbca19a5f92dbd42309c23"
+        },
+        {
+          "original_path": "reference/typeset.md",
+          "path": "reference/typeset.md",
+          "sha256": "442749aed338f51c1a3ccfb182c6ade9b74b90590b67984062ac94a5b100e914"
+        },
+        {
+          "original_path": "reference/visualize.md",
+          "path": "reference/visualize.md",
+          "sha256": "896da399bafcffb0623bdd81bb18709d6eab25c9d5917e739c8798f31ff0d076"
+        },
+        {
+          "original_path": "scripts/command-metadata.json",
+          "path": "scripts/command-metadata.json",
+          "sha256": "e8720f3aa41135211cc58cc299a39eeda86c75651f4279cc1ede8db10dcc0584"
+        },
+        {
+          "original_path": "scripts/data/font-index-failures.json",
+          "path": "scripts/data/font-index-failures.json",
+          "sha256": "835f19a0a3812f3652dd6979a2ce5597f654fd01f26e1b420b92d5f42b997ce4"
+        },
+        {
+          "original_path": "scripts/data/font-index.json",
+          "path": "scripts/data/font-index.json",
+          "sha256": "47edbdfaf27073c47033d1ac7dfee881be49e2dcbda7671d1157300481dde6da"
+        },
+        {
+          "original_path": "scripts/impeccable",
+          "path": "scripts/impeccable",
+          "sha256": "39d9600489073e227e4f4d55c451ce4252a6632ed7ae37923efbbcbc91f16d07"
+        },
+        {
+          "original_path": "scripts/impeccable.cmd",
+          "path": "scripts/impeccable.cmd",
+          "sha256": "759bab1d8adc071fdde2efcf6e2157aa4026f3c2b4f3c342a8070bf328011616"
+        },
+        {
+          "original_path": "scripts/live-browser-dom.js",
+          "path": "scripts/live-browser-dom.js",
+          "sha256": "de1b7404f4cdfd7b515196afb17b74b1980f0bc88cb8681ae93a76ca48ec7bdb"
+        },
+        {
+          "original_path": "scripts/live-browser-ignores.js",
+          "path": "scripts/live-browser-ignores.js",
+          "sha256": "c1cb6877ca99a0c1b38ba0c7d59f32702d3022f6821d8045f7133f7c40b6362f"
+        },
+        {
+          "original_path": "scripts/live-browser-session.js",
+          "path": "scripts/live-browser-session.js",
+          "sha256": "edddeb3fad88adec9a055b1bf9d5c75418cbe97a13b1a7f6765e73249e482563"
+        },
+        {
+          "original_path": "scripts/live-browser.js",
+          "path": "scripts/live-browser.js",
+          "sha256": "f68a3d68ac92606e91aa8878e003d9432ddd09aa97ca01c6b3ce46c937dca316"
+        },
+        {
+          "original_path": "scripts/modern-screenshot.umd.js",
+          "path": "scripts/modern-screenshot.umd.js",
+          "sha256": "bb36665889124a0b6e15f16045265737449c3bdcf2712cdb08af3cfa01563e2b"
+        },
+        {
+          "original_path": "scripts/VERSION",
+          "path": "scripts/VERSION",
+          "sha256": "800cf1c0392b24de7c0a1c6ea6778ecb433dec71c49a150bce96a98477527b2f"
+        },
+        {
+          "original_path": "SKILL.md",
+          "path": "guide.md",
+          "sha256": "fa0cb3ef01a25b9094266109a63c1d01d4b2d4973f75b324f5c4ad7e568d148f"
+        }
+      ]
+    },
+    {
+      "id": "frontend-interface-review",
+      "entry": "references/modules/frontend-interface-review/guide.md",
+      "origin": "local-customization",
+      "snapshot": "user-installed files, 2026-10-09",
+      "upstream_commit": null,
+      "modifications": "SKILL.md renamed to guide.md; content bytes preserved; runtime adapter rules are separate.",
+      "files": [
+        {
+          "original_path": "agents/openai.yaml",
+          "path": "agents/openai.yaml",
+          "sha256": "35002dc9d1f31b95fb53df51b8a700b4bffda502e3535085ad6f3260e0bf3cd0"
+        },
+        {
+          "original_path": "SKILL.md",
+          "path": "guide.md",
+          "sha256": "e8ac087dd22b0b270c108fe4b5f404346738cf4b30fcf864fc7a939d52a3450a"
+        }
+      ]
+    },
+    {
+      "id": "backend-development",
+      "entry": "references/modules/backend-development/guide.md",
+      "origin": "local-customization",
+      "snapshot": "user-installed files, 2026-10-09",
+      "upstream_commit": null,
+      "modifications": "SKILL.md renamed to guide.md; content bytes preserved; runtime adapter rules are separate.",
+      "files": [
+        {
+          "original_path": "agents/openai.yaml",
+          "path": "agents/openai.yaml",
+          "sha256": "8619a54e8c098122a7f3881394f84ca89b684366e848233a29ad18b6ec363935"
+        },
+        {
+          "original_path": "references/verification.md",
+          "path": "references/verification.md",
+          "sha256": "d9996cbfcd3e23b50d81dee02c957452eea6821d106514f9701889900f450dfa"
+        },
+        {
+          "original_path": "SKILL.md",
+          "path": "guide.md",
+          "sha256": "6a204d28c30d269892c14fbbb7bcd444abb9765743ddc50d1b5155058a89d54c"
+        }
+      ]
+    },
+    {
+      "id": "tdd",
+      "entry": "references/modules/tdd/guide.md",
+      "origin": "https://github.com/mattpocock/skills",
+      "snapshot": "user-installed files, 2026-10-09",
+      "upstream_commit": null,
+      "modifications": "SKILL.md renamed to guide.md; content bytes preserved; runtime adapter rules are separate.",
+      "files": [
+        {
+          "original_path": "deep-modules.md",
+          "path": "deep-modules.md",
+          "sha256": "f2123700bf953db1740625686c75bdd145efd486357c47c6818c869fee657a32"
+        },
+        {
+          "original_path": "interface-design.md",
+          "path": "interface-design.md",
+          "sha256": "764c5ff0e3fa6b4ab7095eb65ccc7201e090baf19fa16051dfdb72c06d27417d"
+        },
+        {
+          "original_path": "mocking.md",
+          "path": "mocking.md",
+          "sha256": "3ceb807fdf4a47d6a93d4d9a891e5ba6d362a6247bd08adc451feebfc17361ef"
+        },
+        {
+          "original_path": "refactoring.md",
+          "path": "refactoring.md",
+          "sha256": "54fced22dd1911b7094c3fe7979b7c1a40d40be307482c4adf7dc0588f27d6cc"
+        },
+        {
+          "original_path": "SKILL.md",
+          "path": "guide.md",
+          "sha256": "1d0a1439aefa3ebe6a8fe83b5bb4559610d75268edd0bd4ef7d391d841742fc5"
+        },
+        {
+          "original_path": "tests.md",
+          "path": "tests.md",
+          "sha256": "e12182f5c4c6a844b7c6ab4b8d2623b642aaaae5460fe58ed087efd4f3d5fb8a"
+        }
+      ]
+    },
+    {
+      "id": "write-a-prd",
+      "entry": "references/modules/write-a-prd/guide.md",
+      "origin": "https://github.com/mattpocock/skills",
+      "snapshot": "user-installed files, 2026-10-09",
+      "upstream_commit": null,
+      "modifications": "SKILL.md renamed to guide.md; content bytes preserved; runtime adapter rules are separate.",
+      "files": [
+        {
+          "original_path": "SKILL.md",
+          "path": "guide.md",
+          "sha256": "f8fe27edd7985df33dcfc09d6665eebf281769826a95843e0db396652373f02c"
+        }
+      ]
+    },
+    {
+      "id": "prd-to-issues",
+      "entry": "references/modules/prd-to-issues/guide.md",
+      "origin": "https://github.com/mattpocock/skills",
+      "snapshot": "user-installed files, 2026-10-09",
+      "upstream_commit": null,
+      "modifications": "SKILL.md renamed to guide.md; content bytes preserved; runtime adapter rules are separate.",
+      "files": [
+        {
+          "original_path": "SKILL.md",
+          "path": "guide.md",
+          "sha256": "e2d8d48e76c7b4aa11f3b4bb0c08804dc7f9a37e517f5f9797d3afd7b219b623"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+# Preserve the bytes of the frozen Skill and its third-party snapshots.
+* text=auto
+dev-workflow/** -text

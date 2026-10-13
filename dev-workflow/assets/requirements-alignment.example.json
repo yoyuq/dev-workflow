@@ -1,0 +1,11 @@
+{
+  "method": "grill-me",
+  "mode": "interview",
+  "status": "draft",
+  "goal": "",
+  "scope": "",
+  "acceptance": "",
+  "autonomy": "",
+  "user_confirmation": {"reference": "", "quote": ""},
+  "open_questions": ["填写真实需求与用户确认后，才能进入自动执行。"]
+}

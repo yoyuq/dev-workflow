@@ -1,0 +1,8 @@
+{
+  "format_version": 1,
+  "harness": {"kind": "codex", "executable": "codex", "effort": "low"},
+  "limits": {"attempt_seconds": 300, "no_progress_seconds": 120, "max_output_bytes": 8000000},
+  "protected_files": [],
+  "preflight_checks": [],
+  "memory_project": "replace-with-project-id"
+}

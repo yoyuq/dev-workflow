@@ -1,0 +1,6 @@
+interface:
+  display_name: "前端界面综合审查"
+  short_description: "基于 Impeccable 综合审查前端设计、体验与技术质量，输出分级中文报告"
+  default_prompt: "使用 $frontend-interface-review 对当前项目进行前端界面综合审查，输出按 P0–P3 排序的中文报告，暂不修改业务代码。"
+policy:
+  allow_implicit_invocation: true

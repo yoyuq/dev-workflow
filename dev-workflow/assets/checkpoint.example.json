@@ -1,0 +1,9 @@
+{
+  "goal": "示例：实现并验证某个已授权功能；请替换成真实目标",
+  "task_id": "example-task",
+  "plan": "../plan.md",
+  "code_ref": "示例：填写实际 commit 和未提交改动状态",
+  "summary": "示例：已完成模块拆解和计划，尚未修改业务代码",
+  "next_action": "示例：执行 T1 并按 AC1 验证",
+  "status": "running"
+}

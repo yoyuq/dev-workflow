@@ -1,0 +1,1003 @@
+{
+  "format_version": 1,
+  "name": "课程预约改造示例",
+  "goal": "完成预约、取消和列表的整条路径，兼顾访问边界与旧数据兼容。",
+  "depth": "project",
+  "depth_reason": "多路径、前后端和数据变更，交付完整项目能力。",
+  "concerns": [
+    "frontend",
+    "backend",
+    "data_change",
+    "access"
+  ],
+  "requirements_alignment": {
+    "method": "grill-me",
+    "mode": "interview",
+    "status": "draft",
+    "goal": "完成课程预约项目改造",
+    "scope": "本轮包含预约、取消、列表、冲突反馈、访问边界和兼容；不含支付。",
+    "acceptance": "有效预约可查询；重复预约和满员被拒；只能取消自己的有效预约；旧课程仍可查询。",
+    "autonomy": "允许可逆实现与本地验证，交付分支和报告，不部署。",
+    "user_confirmation": {
+      "reference": "",
+      "quote": ""
+    },
+    "open_questions": [
+      "本文件是示例草稿；使用真实用户规格和确认后才能开工。"
+    ]
+  },
+  "decisions": [
+    {
+      "topic": "outcome",
+      "status": "answered",
+      "answer": "用户可预约与取消课程，查看准确结果。",
+      "source": "案例规格（合成；不代表真实用户确认）"
+    },
+    {
+      "topic": "scope",
+      "status": "answered",
+      "answer": "本轮包含预约、取消、列表、冲突反馈、访问边界和兼容；不含支付。",
+      "source": "案例规格（合成；不代表真实用户确认）"
+    },
+    {
+      "topic": "acceptance",
+      "status": "answered",
+      "answer": "有效预约可查询；重复预约和满员被拒；只能取消自己的有效预约；旧课程仍可查询。",
+      "source": "案例规格（合成；不代表真实用户确认）"
+    },
+    {
+      "topic": "autonomy",
+      "status": "answered",
+      "answer": "允许可逆实现与本地验证，交付分支和报告，不部署。",
+      "source": "案例规格（合成；不代表真实用户确认）"
+    },
+    {
+      "topic": "journeys",
+      "status": "answered",
+      "answer": "选课→预约→查询；进入我的预约→取消→刷新结果。",
+      "source": "案例规格（合成；不代表真实用户确认）"
+    },
+    {
+      "topic": "baseline",
+      "status": "answered",
+      "answer": "示例现状仅有课程列表，没有预约存储或交互。",
+      "source": "案例规格（合成；不代表真实用户确认）"
+    },
+    {
+      "topic": "delivery",
+      "status": "answered",
+      "answer": "交付完整承诺范围，人工视觉判断保留待审。",
+      "source": "案例规格（合成；不代表真实用户确认）"
+    },
+    {
+      "topic": "ui_states",
+      "status": "answered",
+      "answer": "含加载、空列表、预约成功、冲突、取消失败和权限状态。",
+      "source": "案例规格（合成；不代表真实用户确认）"
+    },
+    {
+      "topic": "data_contract",
+      "status": "answered",
+      "answer": "课程与预约关联用户 ID，接口错误与界面反馈对应。",
+      "source": "案例规格（合成；不代表真实用户确认）"
+    },
+    {
+      "topic": "migration",
+      "status": "answered",
+      "answer": "保留旧课程数据，新建预约表；演练迁移与恢复。",
+      "source": "案例规格（合成；不代表真实用户确认）"
+    },
+    {
+      "topic": "access_control",
+      "status": "answered",
+      "answer": "用户只能查看及取消自己的预约；未登录不能创建。",
+      "source": "案例规格（合成；不代表真实用户确认）"
+    }
+  ],
+  "modules": [
+    {
+      "id": "M-rules",
+      "name": "规则",
+      "responsibility": "现状调查与接口契约"
+    },
+    {
+      "id": "M-api",
+      "name": "服务",
+      "responsibility": "持久化、业务与访问边界"
+    },
+    {
+      "id": "M-ui",
+      "name": "界面",
+      "responsibility": "预约操作与状态反馈"
+    },
+    {
+      "id": "M-check",
+      "name": "验收",
+      "responsibility": "路径、回归、审阅与交付"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "R-create",
+      "text": "创建预约",
+      "disposition": "implement",
+      "basis": "案例完整交付范围",
+      "acceptance": [
+        {
+          "id": "AC-create",
+          "text": "可创建预约，重复/满员不能写入"
+        }
+      ]
+    },
+    {
+      "id": "R-cancel",
+      "text": "取消预约",
+      "disposition": "implement",
+      "basis": "案例完整交付范围",
+      "acceptance": [
+        {
+          "id": "AC-cancel",
+          "text": "自己的有效预约可取消，过期/已取消给明确结果"
+        }
+      ]
+    },
+    {
+      "id": "R-list",
+      "text": "查看预约",
+      "disposition": "implement",
+      "basis": "案例完整交付范围",
+      "acceptance": [
+        {
+          "id": "AC-list",
+          "text": "列表显示最新预约与取消状态"
+        }
+      ]
+    },
+    {
+      "id": "R-access",
+      "text": "用户访问边界",
+      "disposition": "implement",
+      "basis": "案例完整交付范围",
+      "acceptance": [
+        {
+          "id": "AC-access",
+          "text": "无法读写其他用户预约"
+        }
+      ]
+    },
+    {
+      "id": "R-compat",
+      "text": "旧数据兼容",
+      "disposition": "implement",
+      "basis": "案例完整交付范围",
+      "acceptance": [
+        {
+          "id": "AC-compat",
+          "text": "迁移后原课程查询保持可用，恢复流程可演练"
+        }
+      ]
+    },
+    {
+      "id": "R-pay",
+      "disposition": "out_of_scope",
+      "text": "支付接入",
+      "basis": "案例规格明确不含支付",
+      "acceptance": []
+    }
+  ],
+  "tasks": [
+    {
+      "id": "baseline",
+      "title": "核对现状",
+      "kind": "investigation",
+      "goal": "查清课程数据和当前操作路径",
+      "module_ids": [
+        "M-rules"
+      ],
+      "depends_on": [],
+      "criterion_ids": [],
+      "output": "可复用点与差距记录",
+      "scope": [
+        "M-rules"
+      ],
+      "skills": [],
+      "verification": [
+        "实际阅读课程路由、数据模型和相关基线"
+      ],
+      "titles": {
+        "en": "Audit baseline",
+        "zh-CN": "核对现状"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "查清课程数据和当前操作路径",
+            "text": "Inspect course data and the current user journey"
+          },
+          "output": {
+            "source": "可复用点与差距记录",
+            "text": "Reusable components and gap findings"
+          },
+          "verification": {
+            "source": "实际阅读课程路由、数据模型和相关基线",
+            "text": "Read the course routes, data models and relevant baseline checks"
+          }
+        }
+      }
+    },
+    {
+      "id": "contract",
+      "title": "约定接口",
+      "kind": "design",
+      "goal": "约定预约字段与错误语义",
+      "module_ids": [
+        "M-rules"
+      ],
+      "depends_on": [
+        "baseline"
+      ],
+      "criterion_ids": [],
+      "output": "请求响应与冲突契约",
+      "scope": [
+        "M-rules"
+      ],
+      "skills": [],
+      "verification": [
+        "逐项对照两条用户路径及错误状态"
+      ],
+      "titles": {
+        "en": "Define API",
+        "zh-CN": "约定接口"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "约定预约字段与错误语义",
+            "text": "Define booking fields and error semantics"
+          },
+          "output": {
+            "source": "请求响应与冲突契约",
+            "text": "Request, response and conflict contracts"
+          },
+          "verification": {
+            "source": "逐项对照两条用户路径及错误状态",
+            "text": "Check both user journeys and their error states against the contract"
+          }
+        }
+      }
+    },
+    {
+      "id": "states",
+      "title": "设计状态",
+      "kind": "design",
+      "goal": "明确界面加载、空白、失败与成功状态",
+      "module_ids": [
+        "M-ui"
+      ],
+      "depends_on": [
+        "contract"
+      ],
+      "criterion_ids": [],
+      "output": "交互状态方案",
+      "scope": [
+        "M-ui"
+      ],
+      "skills": [
+        "impeccable"
+      ],
+      "verification": [
+        "逐项核对界面状态与接口错误"
+      ],
+      "titles": {
+        "en": "Design states",
+        "zh-CN": "设计状态"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "明确界面加载、空白、失败与成功状态",
+            "text": "Define loading, empty, error and success states"
+          },
+          "output": {
+            "source": "交互状态方案",
+            "text": "Interaction state design"
+          },
+          "verification": {
+            "source": "逐项核对界面状态与接口错误",
+            "text": "Check each interface state against API errors"
+          }
+        }
+      }
+    },
+    {
+      "id": "migration",
+      "title": "迁移数据",
+      "kind": "implementation",
+      "goal": "建立预约存储并保持旧课程数据",
+      "module_ids": [
+        "M-api"
+      ],
+      "depends_on": [
+        "contract"
+      ],
+      "criterion_ids": [
+        "AC-compat"
+      ],
+      "output": "迁移与恢复操作",
+      "scope": [
+        "M-api"
+      ],
+      "skills": [
+        "backend-development"
+      ],
+      "verification": [
+        "在临时数据库演练迁移与恢复"
+      ],
+      "titles": {
+        "en": "Migrate data",
+        "zh-CN": "迁移数据"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "建立预约存储并保持旧课程数据",
+            "text": "Add booking storage while preserving existing course data"
+          },
+          "output": {
+            "source": "迁移与恢复操作",
+            "text": "Migration and recovery procedures"
+          },
+          "verification": {
+            "source": "在临时数据库演练迁移与恢复",
+            "text": "Rehearse migration and recovery in a temporary database"
+          }
+        }
+      }
+    },
+    {
+      "id": "create",
+      "title": "创建预约",
+      "kind": "implementation",
+      "goal": "实现创建预约、重复与满员校验",
+      "module_ids": [
+        "M-api"
+      ],
+      "depends_on": [
+        "migration"
+      ],
+      "criterion_ids": [
+        "AC-create"
+      ],
+      "output": "预约创建行为",
+      "scope": [
+        "M-api"
+      ],
+      "skills": [
+        "backend-development"
+      ],
+      "verification": [
+        "接口样例检查有效、重复和满员请求"
+      ],
+      "titles": {
+        "en": "Create booking",
+        "zh-CN": "创建预约"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "实现创建预约、重复与满员校验",
+            "text": "Implement booking creation with duplicate and capacity checks"
+          },
+          "output": {
+            "source": "预约创建行为",
+            "text": "Booking creation behavior"
+          },
+          "verification": {
+            "source": "接口样例检查有效、重复和满员请求",
+            "text": "Exercise valid, duplicate and full-capacity API requests"
+          }
+        }
+      }
+    },
+    {
+      "id": "cancel",
+      "title": "取消预约",
+      "kind": "implementation",
+      "goal": "实现预约取消与重复取消结果",
+      "module_ids": [
+        "M-api"
+      ],
+      "depends_on": [
+        "migration"
+      ],
+      "criterion_ids": [
+        "AC-cancel"
+      ],
+      "output": "取消行为",
+      "scope": [
+        "M-api"
+      ],
+      "skills": [
+        "backend-development"
+      ],
+      "verification": [
+        "接口样例检查有效与重复取消"
+      ],
+      "titles": {
+        "en": "Cancel booking",
+        "zh-CN": "取消预约"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "实现预约取消与重复取消结果",
+            "text": "Implement cancellation and repeated-cancellation results"
+          },
+          "output": {
+            "source": "取消行为",
+            "text": "Cancellation behavior"
+          },
+          "verification": {
+            "source": "接口样例检查有效与重复取消",
+            "text": "Exercise valid and repeated cancellation API requests"
+          }
+        }
+      }
+    },
+    {
+      "id": "query",
+      "title": "查询预约",
+      "kind": "implementation",
+      "goal": "返回当前用户最新预约列表",
+      "module_ids": [
+        "M-api"
+      ],
+      "depends_on": [
+        "migration"
+      ],
+      "criterion_ids": [
+        "AC-list"
+      ],
+      "output": "查询行为",
+      "scope": [
+        "M-api"
+      ],
+      "skills": [
+        "backend-development"
+      ],
+      "verification": [
+        "接口样例检查创建和取消后的列表"
+      ],
+      "titles": {
+        "en": "Query bookings",
+        "zh-CN": "查询预约"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "返回当前用户最新预约列表",
+            "text": "Return the current user's latest bookings"
+          },
+          "output": {
+            "source": "查询行为",
+            "text": "Booking query behavior"
+          },
+          "verification": {
+            "source": "接口样例检查创建和取消后的列表",
+            "text": "Check API lists after booking creation and cancellation"
+          }
+        }
+      }
+    },
+    {
+      "id": "access",
+      "title": "限制访问",
+      "kind": "implementation",
+      "goal": "限制读写到当前用户",
+      "module_ids": [
+        "M-api"
+      ],
+      "depends_on": [
+        "create",
+        "cancel",
+        "query"
+      ],
+      "criterion_ids": [
+        "AC-access"
+      ],
+      "output": "用户访问边界",
+      "scope": [
+        "M-api"
+      ],
+      "skills": [
+        "backend-development"
+      ],
+      "verification": [
+        "使用两个用户交叉尝试读写预约"
+      ],
+      "titles": {
+        "en": "Restrict access",
+        "zh-CN": "限制访问"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "限制读写到当前用户",
+            "text": "Restrict reads and writes to the current user"
+          },
+          "output": {
+            "source": "用户访问边界",
+            "text": "User access boundaries"
+          },
+          "verification": {
+            "source": "使用两个用户交叉尝试读写预约",
+            "text": "Use two users to attempt cross-user booking reads and writes"
+          }
+        }
+      }
+    },
+    {
+      "id": "form",
+      "title": "预约表单",
+      "kind": "implementation",
+      "goal": "完成预约操作与重复/满员提示",
+      "module_ids": [
+        "M-ui"
+      ],
+      "depends_on": [
+        "states",
+        "create"
+      ],
+      "criterion_ids": [
+        "AC-create"
+      ],
+      "output": "可操作预约界面",
+      "scope": [
+        "M-ui"
+      ],
+      "skills": [
+        "impeccable"
+      ],
+      "verification": [
+        "浏览器操作成功预约与冲突反馈"
+      ],
+      "titles": {
+        "en": "Booking form",
+        "zh-CN": "预约表单"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "完成预约操作与重复/满员提示",
+            "text": "Implement booking interactions with duplicate and capacity feedback"
+          },
+          "output": {
+            "source": "可操作预约界面",
+            "text": "Usable booking interface"
+          },
+          "verification": {
+            "source": "浏览器操作成功预约与冲突反馈",
+            "text": "Test successful booking and conflict feedback in the browser"
+          }
+        }
+      }
+    },
+    {
+      "id": "cancel-ui",
+      "title": "取消交互",
+      "kind": "implementation",
+      "goal": "完成取消操作与失败反馈",
+      "module_ids": [
+        "M-ui"
+      ],
+      "depends_on": [
+        "states",
+        "cancel"
+      ],
+      "criterion_ids": [
+        "AC-cancel"
+      ],
+      "output": "可操作取消界面",
+      "scope": [
+        "M-ui"
+      ],
+      "skills": [
+        "impeccable"
+      ],
+      "verification": [
+        "浏览器操作取消与重复取消提示"
+      ],
+      "titles": {
+        "en": "Cancel interaction",
+        "zh-CN": "取消交互"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "完成取消操作与失败反馈",
+            "text": "Implement cancellation interactions and failure feedback"
+          },
+          "output": {
+            "source": "可操作取消界面",
+            "text": "Usable cancellation interface"
+          },
+          "verification": {
+            "source": "浏览器操作取消与重复取消提示",
+            "text": "Test cancellation and repeated-cancellation feedback in the browser"
+          }
+        }
+      }
+    },
+    {
+      "id": "list-ui",
+      "title": "结果列表",
+      "kind": "implementation",
+      "goal": "展示最新结果及加载、空白、错误状态",
+      "module_ids": [
+        "M-ui"
+      ],
+      "depends_on": [
+        "states",
+        "query"
+      ],
+      "criterion_ids": [
+        "AC-list"
+      ],
+      "output": "预约列表",
+      "scope": [
+        "M-ui"
+      ],
+      "skills": [
+        "impeccable"
+      ],
+      "verification": [
+        "浏览器检查列表状态并刷新结果"
+      ],
+      "titles": {
+        "en": "Results list",
+        "zh-CN": "结果列表"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "展示最新结果及加载、空白、错误状态",
+            "text": "Show current results with loading, empty and error states"
+          },
+          "output": {
+            "source": "预约列表",
+            "text": "Booking results list"
+          },
+          "verification": {
+            "source": "浏览器检查列表状态并刷新结果",
+            "text": "Check list states and refreshed results in the browser"
+          }
+        }
+      }
+    },
+    {
+      "id": "check-create",
+      "title": "联调预约",
+      "kind": "validation",
+      "goal": "核验选课到预约到查看的路径及冲突边界",
+      "module_ids": [
+        "M-check"
+      ],
+      "depends_on": [
+        "form",
+        "access"
+      ],
+      "criterion_ids": [
+        "AC-create"
+      ],
+      "output": "预约路径结果",
+      "scope": [
+        "M-check"
+      ],
+      "skills": [],
+      "verification": [
+        "浏览器配合 API 核对写入、错误与显示"
+      ],
+      "titles": {
+        "en": "Verify booking",
+        "zh-CN": "联调预约"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "核验选课到预约到查看的路径及冲突边界",
+            "text": "Verify the course-selection, booking and results journey, including conflicts"
+          },
+          "output": {
+            "source": "预约路径结果",
+            "text": "Booking journey verification"
+          },
+          "verification": {
+            "source": "浏览器配合 API 核对写入、错误与显示",
+            "text": "Use the browser and API to verify writes, errors and displayed results"
+          }
+        }
+      }
+    },
+    {
+      "id": "check-cancel",
+      "title": "联调取消",
+      "kind": "validation",
+      "goal": "核验取消与后续结果",
+      "module_ids": [
+        "M-check"
+      ],
+      "depends_on": [
+        "cancel-ui",
+        "access"
+      ],
+      "criterion_ids": [
+        "AC-cancel"
+      ],
+      "output": "取消路径结果",
+      "scope": [
+        "M-check"
+      ],
+      "skills": [],
+      "verification": [
+        "浏览器配合 API 核对取消与错误反馈"
+      ],
+      "titles": {
+        "en": "Verify cancellation",
+        "zh-CN": "联调取消"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "核验取消与后续结果",
+            "text": "Verify cancellation and subsequent results"
+          },
+          "output": {
+            "source": "取消路径结果",
+            "text": "Cancellation journey verification"
+          },
+          "verification": {
+            "source": "浏览器配合 API 核对取消与错误反馈",
+            "text": "Use the browser and API to verify cancellation and error feedback"
+          }
+        }
+      }
+    },
+    {
+      "id": "check-list",
+      "title": "核验列表",
+      "kind": "validation",
+      "goal": "核验创建/取消后的结果一致",
+      "module_ids": [
+        "M-check"
+      ],
+      "depends_on": [
+        "list-ui",
+        "access"
+      ],
+      "criterion_ids": [
+        "AC-list"
+      ],
+      "output": "列表一致性结果",
+      "scope": [
+        "M-check"
+      ],
+      "skills": [],
+      "verification": [
+        "从两种操作后刷新列表核对数据"
+      ],
+      "titles": {
+        "en": "Verify list",
+        "zh-CN": "核验列表"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "核验创建/取消后的结果一致",
+            "text": "Verify consistent results after creation and cancellation"
+          },
+          "output": {
+            "source": "列表一致性结果",
+            "text": "List consistency verification"
+          },
+          "verification": {
+            "source": "从两种操作后刷新列表核对数据",
+            "text": "Refresh the list after both operations and compare its data"
+          }
+        }
+      }
+    },
+    {
+      "id": "check-access",
+      "title": "核验权限",
+      "kind": "validation",
+      "goal": "核验跨用户隔离与未登录行为",
+      "module_ids": [
+        "M-check"
+      ],
+      "depends_on": [
+        "access"
+      ],
+      "criterion_ids": [
+        "AC-access"
+      ],
+      "output": "访问测试结果",
+      "scope": [
+        "M-check"
+      ],
+      "skills": [],
+      "verification": [
+        "在 API 集成环境执行两用户访问用例"
+      ],
+      "titles": {
+        "en": "Verify access",
+        "zh-CN": "核验权限"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "核验跨用户隔离与未登录行为",
+            "text": "Verify user isolation and signed-out behavior"
+          },
+          "output": {
+            "source": "访问测试结果",
+            "text": "Access test results"
+          },
+          "verification": {
+            "source": "在 API 集成环境执行两用户访问用例",
+            "text": "Run two-user access cases in the API integration environment"
+          }
+        }
+      }
+    },
+    {
+      "id": "check-compat",
+      "title": "核验兼容",
+      "kind": "validation",
+      "goal": "核验旧课程与迁移恢复",
+      "module_ids": [
+        "M-check"
+      ],
+      "depends_on": [
+        "migration"
+      ],
+      "criterion_ids": [
+        "AC-compat"
+      ],
+      "output": "兼容结果",
+      "scope": [
+        "M-check"
+      ],
+      "skills": [],
+      "verification": [
+        "在迁移演练库查询旧课程并执行恢复"
+      ],
+      "titles": {
+        "en": "Verify compatibility",
+        "zh-CN": "核验兼容"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "核验旧课程与迁移恢复",
+            "text": "Verify existing courses and migration recovery"
+          },
+          "output": {
+            "source": "兼容结果",
+            "text": "Compatibility results"
+          },
+          "verification": {
+            "source": "在迁移演练库查询旧课程并执行恢复",
+            "text": "Query existing courses and perform recovery in the migration rehearsal database"
+          }
+        }
+      }
+    },
+    {
+      "id": "review",
+      "title": "审阅改动",
+      "kind": "review",
+      "goal": "审阅边界、回归与适用的视觉证据",
+      "module_ids": [
+        "M-check"
+      ],
+      "depends_on": [
+        "migration",
+        "create",
+        "cancel",
+        "query",
+        "access",
+        "form",
+        "cancel-ui",
+        "list-ui"
+      ],
+      "criterion_ids": [],
+      "output": "审阅发现及人工待审清单",
+      "scope": [
+        "M-check"
+      ],
+      "skills": [],
+      "verification": [
+        "对照完整需求、代码差异和界面截图逐项审阅"
+      ],
+      "titles": {
+        "en": "Review changes",
+        "zh-CN": "审阅改动"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "审阅边界、回归与适用的视觉证据",
+            "text": "Review boundaries, regressions and applicable visual evidence"
+          },
+          "output": {
+            "source": "审阅发现及人工待审清单",
+            "text": "Review findings and remaining human review items"
+          },
+          "verification": {
+            "source": "对照完整需求、代码差异和界面截图逐项审阅",
+            "text": "Review each requirement against code changes and interface screenshots"
+          }
+        }
+      }
+    },
+    {
+      "id": "deliver",
+      "title": "交付报告",
+      "kind": "delivery",
+      "goal": "逐条报告需求状态、证据和剩余项",
+      "module_ids": [
+        "M-check"
+      ],
+      "depends_on": [
+        "check-create",
+        "check-cancel",
+        "check-list",
+        "check-access",
+        "check-compat",
+        "review"
+      ],
+      "criterion_ids": [],
+      "output": "提交与验收报告",
+      "scope": [
+        "M-check"
+      ],
+      "skills": [],
+      "verification": [
+        "核对全部需求及实际验收证据，人工项不得自填通过"
+      ],
+      "titles": {
+        "en": "Delivery report",
+        "zh-CN": "交付报告"
+      },
+      "display": {
+        "en": {
+          "goal": {
+            "source": "逐条报告需求状态、证据和剩余项",
+            "text": "Report each requirement's status, evidence and remaining work"
+          },
+          "output": {
+            "source": "提交与验收报告",
+            "text": "Commit and acceptance report"
+          },
+          "verification": {
+            "source": "核对全部需求及实际验收证据，人工项不得自填通过",
+            "text": "Check all requirements against actual acceptance evidence; never mark human review passed on the user's behalf"
+          }
+        }
+      }
+    }
+  ],
+  "locale": "zh-CN",
+  "display": {
+    "en": {
+      "name": {
+        "source": "课程预约改造示例",
+        "text": "Course booking upgrade example"
+      },
+      "goal": {
+        "source": "完成预约、取消和列表的整条路径，兼顾访问边界与旧数据兼容。",
+        "text": "Complete the booking, cancellation and results journeys, including access boundaries and compatibility with existing data."
+      }
+    }
+  }
+}

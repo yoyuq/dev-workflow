@@ -1,0 +1,36 @@
+{
+  "format_version": 2,
+  "kind": "coordinated",
+  "execution_mode": "full",
+  "review": {"max_rounds": 8},
+  "requirements_alignment": {
+    "method": "grill-me", "mode": "interview", "status": "draft",
+    "goal": "", "scope": "", "acceptance": "", "autonomy": "",
+    "user_confirmation": {"reference": "", "quote": ""},
+    "open_questions": ["先对齐需求并记录真实用户确认"]
+  },
+  "run_id": "project-example",
+  "goal": "Replace with the authorized project outcome",
+  "authorization_ref": "Reference the user's implementation authorization",
+  "repository": "/absolute/project",
+  "base_commit": "replace-with-full-commit-sha",
+  "skill_root": "/absolute/dev-workflow",
+  "execution_plan": "/absolute/controller-inputs/execution-plan.md",
+  "delivery": "branch_commit_and_report",
+  "limits": {"parallelism": 2, "max_attempts": 2, "max_coordinator_rounds": 4, "max_run_seconds": 3600, "message_timeout_seconds": 60, "cost_limit": null},
+  "contracts": {"api": {"text": "Approved request/response fields and compatibility constraints", "editable": false}},
+  "requirements": [
+    {"id": "R-API", "text": "Serve the confirmed API behavior", "task_ids": ["API"], "acceptance": [
+      {"id": "AC-API", "text": "API behavior meets the prepared contract", "type": "automated", "checks": [{"task_id": "API", "check_id": "api-behavior"}]}
+    ]},
+    {"id": "R-UI", "text": "Provide the confirmed client behavior and visual hierarchy", "task_ids": ["UI"], "acceptance": [
+      {"id": "AC-UI", "text": "Client behavior meets the prepared interaction cases", "type": "automated", "checks": [{"task_id": "UI", "check_id": "ui-behavior"}]},
+      {"id": "AC-UI-VISUAL", "text": "Human reviews visual hierarchy at the prepared viewport sizes", "type": "manual", "task_id": "UI", "review_index": 0}
+    ]}
+  ],
+  "tasks": [
+    {"id": "API", "module": "service", "title": "实现接口", "goal": "Implement the prepared API contract", "allowed_scope": ["src/api"], "depends_on": [], "requires": [], "produces": ["api-ready"], "contracts": ["api"], "resources": ["test-database"], "manual_review": [], "internal_guides": ["references/modules/backend-development/guide.md"], "verification": [{"id": "api-behavior", "argv": ["python", "-B", "/absolute/controller-inputs/check_api.py", "{repo}"], "cwd": ".", "timeout_seconds": 60}]},
+    {"id": "UI", "module": "client", "title": "实现界面", "goal": "Implement the prepared client against the accepted API", "allowed_scope": ["src/ui"], "depends_on": [], "requires": ["api-ready"], "produces": [], "contracts": ["api"], "resources": [], "manual_review": ["Review visual hierarchy at the prepared viewport sizes"], "internal_guides": ["references/modules/impeccable/guide.md"], "verification": [{"id": "ui-behavior", "argv": ["python", "-B", "/absolute/controller-inputs/check_ui.py", "{repo}"], "cwd": ".", "timeout_seconds": 60}]}
+  ],
+  "integration_checks": []
+}

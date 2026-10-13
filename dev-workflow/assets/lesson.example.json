@@ -1,0 +1,12 @@
+{
+  "id": "example-unresolved-error",
+  "status": "unresolved",
+  "summary": "示例记录，请替换为实际问题",
+  "context": "项目、模块、技术版本和触发条件",
+  "symptom": "实际观察到的现象与预期差异",
+  "attempts": ["已尝试的方法及真实结果"],
+  "lesson": "目前排除的原因与下一条可检验线索；未解决不能当作结论",
+  "tags": ["example"],
+  "code_ref": "实际代码状态",
+  "evidence": []
+}

@@ -1,0 +1,70 @@
+{
+  "format_version": 4,
+  "run_id": "",
+  "status": "draft",
+  "mode": "execute",
+  "requirements_alignment": {
+    "method": "grill-me", "mode": "interview", "status": "draft",
+    "goal": "", "scope": "", "acceptance": "", "autonomy": "",
+    "user_confirmation": {"reference": "", "quote": ""},
+    "open_questions": ["先对齐需求并记录真实用户确认"]
+  },
+  "execution_plan": {"path": "", "sha256": ""},
+  "requirements": [
+    {"id": "REQ-001", "description": ""}
+  ],
+  "project": {
+    "repository": "",
+    "base_ref": "",
+    "base_commit": "",
+    "work_branch": "",
+    "frontend_surface": "",
+    "backend_stack": ""
+  },
+  "decision_record": "",
+  "trusted_authorization_ref": "",
+  "skill_versions": {},
+  "limits": {
+    "note": "以下仅为配置示例；部署时根据用户要求设定并由执行器落实。",
+    "max_run_minutes": 120,
+    "max_tasks": 3,
+    "max_attempts_per_task": 2,
+    "cost_limit": null
+  },
+  "delivery": "branch_commit_and_report",
+  "modules": [
+    {
+      "id": "module-001",
+      "name": "",
+      "responsibility": "",
+      "inputs": [],
+      "outputs": [],
+      "depends_on": []
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-001",
+      "module_ids": ["module-001"],
+      "module_dependencies": {},
+      "goal": "",
+      "status": "ready",
+      "depends_on": [],
+      "allowed_scope": [],
+      "required_skills": [],
+      "acceptance_criteria": [
+        {
+          "id": "AC-001",
+          "description": "",
+          "requirement_ids": ["REQ-001"],
+          "mode": "automated",
+          "verification_ids": ["acceptance"]
+        }
+      ],
+      "verification": [
+        {"id": "acceptance", "argv": [], "cwd": ".", "timeout_seconds": 300}
+      ],
+      "blockers": []
+    }
+  ]
+}
