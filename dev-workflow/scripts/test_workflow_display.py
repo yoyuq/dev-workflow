@@ -76,7 +76,8 @@ class DisplayTests(unittest.TestCase):
 
     def test_artifact_copy_changes_only_labels_not_file_paths_or_raw_logs(self):
         with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder);attempt=root/'attempts/A/1';attempt.mkdir(parents=True)
+            # Registered runs use canonical roots; Windows TEMP may use an 8.3 alias.
+            root=Path(folder).resolve();attempt=root/'attempts/A/1';attempt.mkdir(parents=True)
             raw='Original 中文 log';(attempt/'stderr.log').write_text(raw,encoding='utf-8')
             rows=observer.catalog(root);self.assertEqual(len(rows),1)
             item=rows[0];self.assertEqual(display.field(item,'label','en'),'A / Attempt 1 · Error output')

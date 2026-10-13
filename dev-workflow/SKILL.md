@@ -2,7 +2,7 @@
 name: dev-workflow
 description: 实现或续接开发任务：用内置 grill-me 按项目复杂度对齐需求，拆成可验收任务并持续实施；支持当前会话、夜间准备、多分支协作和进度续接。不用于纯咨询、单独审查或编辑技能本身。
 metadata:
-  version: "2.12.2"
+  version: "2.12.3"
   compatibility: Codex and Claude Code with file and command tools; Python 3.10+ for the optional controller.
 ---
 
@@ -47,4 +47,4 @@ metadata:
 
 查看进度和故障时使用 [运行看板](references/observability.md)，以流程图显示任务依赖与状态，点击节点再查看尝试、时间线和日志；日志现象与排查建议不能代替根因验证。
 
-包版本 2.12.2 与协调计划 v2、旧串行计划 v4 是不同概念。[迁移和安装](references/portability.md) · [第三方来源与许可证](THIRD_PARTY.md)。用户当前指令和宿主规则优先；本包不会自行授予外部操作或权限变更。
+包版本 2.12.3 与协调计划 v2、旧串行计划 v4 是不同概念。[迁移和安装](references/portability.md) · [第三方来源与许可证](THIRD_PARTY.md)。用户当前指令和宿主规则优先；本包不会自行授予外部操作或权限变更。

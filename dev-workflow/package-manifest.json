@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "name": "dev-workflow",
-  "version": "2.12.2",
+  "version": "2.12.3",
   "night_plan_format_version": 4,
   "snapshot_date": "2026-10-13",
   "files": {
@@ -142,11 +142,11 @@
     "scripts/test_dashboard_motion.cjs": "4a1266c481ea9dcb982ef129f2d0f41207040b54fa80a09330edd7b38a60ec00",
     "scripts/test_dashboard_titles.cjs": "467bdaa48f6c0c3499691f4cbe265a1c8ad5b88188370324a2f599fc88cd79ec",
     "scripts/test_plan_contract.py": "b9fc4de44d83f6af2b287ee70e82183087b066402e65767e4876fa0ec6e806ac",
-    "scripts/test_portable.py": "64277de515f013c418b1d30137fad505b1c500ad05a5c20bb5a180197cb62a80",
+    "scripts/test_portable.py": "a1f4e63348b50d4092d94e6b4269f02860728b17336c5933a70066074256e024",
     "scripts/test_requirements_alignment.py": "28801fcf6caafed3496b510c0ec33023c63f0343fedb9a6dec16c40737e6c316",
     "scripts/test_workflow_coordinator.py": "18a7a3544141b8f143f6dae433d213d3df3c2dd8784ec4bc4dc9314b2385d6ea",
     "scripts/test_workflow_depth.py": "0e0086bfb9033dcb075abdeeb8cdcd468beb3b25823a0b06c90004ed1be24fd4",
-    "scripts/test_workflow_display.py": "0de22b833993df44852680ad79a74ae56054b53925d9d9acd1cebeeca3e39510",
+    "scripts/test_workflow_display.py": "e1ee50f00a60569fcca7218e9c0017ed3b37292a0188ce05e2c001886a87b04f",
     "scripts/test_workflow_entrypoint.py": "4761383a5d4cbbccb31a395eb979a2787f3099292a148b7c63f1b5e1ee0d7636",
     "scripts/test_workflow_human.py": "7773b89e8904b6553dcc4ccb4710ef0059d1a3f35131b7db8062cfabc2a5d858",
     "scripts/test_workflow_learning.py": "3f56de7f1264211fcb5fd7e1bbd4554f4047706995fc157a90615ac5647e5888",
@@ -183,7 +183,7 @@
     "scripts/workflow_service.py": "b209ddcb8e395c74ba549491fce82b0c71eef920566d9a4470ba2d14b95e453d",
     "scripts/workflow_session.py": "f792001b976cdeb48d8bb14889e88dd139f187ba3e35b9c8fabc7b85b5802382",
     "scripts/workflow_titles.py": "b63416f2c94b8241e22a0faefbf944f6cb768ebafd05b5cd96127db06c9542a7",
-    "SKILL.md": "2ec107cebc4ee50356a73dea2b3bcc562a8dc21f5c71aa544dbf798e6f3ac5a3",
+    "SKILL.md": "ca9198d17e3db4efc0b57984f63b758b342bd6e0298c3ffa34d5bf4baeace8b2",
     "THIRD_PARTY.md": "0985fab06412bfdc95285eab5cdeecb20778ee276bb9f1cce592e82dd9efd53a"
   },
   "coordination_plan_format_version": 2
