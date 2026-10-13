@@ -9,6 +9,19 @@ import workflow_runtime as runtime
 import workflow_human as human
 
 
+class RecoverableReviewFailure(checks.Rejected):
+    """A failed process after binding/source checks, never a draft approval."""
+    def __init__(self, record):
+        self.record = record
+        super().__init__('independent review process failed: ' + record['process']['reason'])
+
+
+class BaselineFailure(checks.Rejected):
+    def __init__(self, records):
+        self.records = records
+        super().__init__('fresh review baseline failed')
+
+
 def binding(plan, state, head, task_id):
     return {"head": head, "task_id": task_id, "contracts": human.versions(state),
             "revision": len(state.get("plan_revisions", []))}
@@ -33,6 +46,7 @@ def prepare_context(plan, state, head, task_id, workspace, folder, baseline=None
     dependencies.update(t["id"] for t in plan["tasks"] if milestones.intersection(t.get("produces", [])))
     ids = [t["id"] for t in selected]
     commands = [{"task_id": t["id"], **check} for t in selected for check in t["verification"]]
+    commands.extend(check for check in plan.get('assurance', {}).get('checks', []) if check['task_id'] in ids)
     if integration:
         commands.extend({"task_id": "integration", **check} for check in plan.get("integration_checks", []))
     prior = []
@@ -55,6 +69,7 @@ def prepare_context(plan, state, head, task_id, workspace, folder, baseline=None
                "dependencies": [{key: t.get(key) for key in ("id", "title", "module", "allowed_scope", "produces", "contracts")}
                                 for t in plan["tasks"] if t["id"] in dependencies and t["id"] not in ids],
                "contracts": state.get("contracts", {}), "check_commands": commands,
+               "assurance": [c for c in plan.get('assurance', {}).get('checks', []) if c['task_id'] in ids],
                "check_instructions": "argv uses {repo} for workspace; cwd is relative to it. Evidence below was run by the controller, not in your sandbox. Confirm runtime access once; report unavailable commands, never repeatedly retry permission denials or weaken checks.",
                "checks": entry.get("last_checks", []) if not integration else
                    [{"task_id": tid, "commit": e.get("commit"), "task_checks": e.get("last_checks", []),
@@ -68,7 +83,7 @@ def prepare_context(plan, state, head, task_id, workspace, folder, baseline=None
     # Full history, commands, source, and whole-task diff remain available on demand.
     brief = {key: context[key] for key in ("binding", "workspace", "base_commit", "project_base_commit", "goal",
              "requirements", "tasks", "task_owners", "scope", "dependencies", "contracts", "focus",
-             "learning_proposals", "failure_cases")}
+             "learning_proposals", "failure_cases", "assurance")}
     brief["changes"] = context["changes"]
     brief["prior_reviews"] = [{key: r[key] for key in ("binding", "decision", "summary", "findings", "validation", "report_path")}
                               for r in prior]
@@ -114,7 +129,8 @@ def run_baseline(plan, state, head, task_id, workspace, folder, remaining):
     ids = [t["id"] for t in plan["tasks"]] if task_id == "integration" else [task_id]
     records = coord.verify(plan, ids, workspace, folder / "baseline", remaining, final=task_id == "integration")
     checks.require(coord.git(workspace, "rev-parse", "HEAD") == head, "review baseline changed HEAD")
-    checks.require(all(r["result"] == "passed" for r in records), "fresh review baseline failed: " + str(coord.failed_feedback(records)))
+    if not all(r['result'] == 'passed' for r in records):
+        raise BaselineFailure(records)
     return {"binding": binding(plan, state, head, task_id), "workspace": str(workspace),
             "executor": "controller; fresh isolated review worktree, not worker claims or cached results",
             "records": records,
@@ -188,6 +204,31 @@ def validate_report(report, context):
 
 
 def evaluate(root, plan, state, bus, config, head, task_id, remaining):
+    """Bounded retries of process faults; never repair inputs or weaken checks."""
+    started = time.monotonic()
+    maximum = plan.get('review', {}).get('max_recovery_attempts', 0)
+    expected = binding(plan, state, head, task_id)
+    for retry in range(maximum + 1):
+        available = remaining - (time.monotonic() - started)
+        try:
+            record = evaluate_once(root, plan, state, bus, config, head, task_id, available)
+            if retry:
+                bus.save(state, 'review_recovery_completed', task=task_id, binding=expected, retries=retry)
+            return record
+        except RecoverableReviewFailure as exc:
+            # Persisted history prevents resume from renewing this allowance.
+            used = sum(r['binding'] == expected for r in state.get('review_recoveries', []))
+            left = remaining - (time.monotonic() - started)
+            if used >= maximum or left <= 0 or (root / 'cancel.request').exists():
+                raise
+            item = {**exc.record, 'retry': used + 1}
+            state.setdefault('review_recoveries', []).append(item)
+            bus.save(state, 'review_recovery_scheduled', task=task_id, binding=expected,
+                     retry=used + 1, reason=exc.record['process']['reason'], evidence=exc.record['process_path'])
+    raise checks.Rejected('review recovery budget exhausted')
+
+
+def evaluate_once(root, plan, state, bus, config, head, task_id, remaining):
     import workflow_coordinator as coord
     started = time.monotonic()
     expected = binding(plan, state, head, task_id)
@@ -199,7 +240,7 @@ def evaluate(root, plan, state, bus, config, head, task_id, remaining):
     original_count = sum(not t.get("support_for") for t in plan["tasks"])
     limit = plan.get("review", {}).get("max_rounds", 2 * (original_count + plan.get("replanning", {}).get("max_added_tasks", 0)) * plan["limits"]["max_attempts"])
     checks.require(state.get("review_rounds", 0) < limit and remaining > 0, "review budget exhausted")
-    environment = runtime.preflight(config, Path(plan["repository"]))
+    environment = runtime.preflight(config, Path(plan["repository"]), remaining=remaining)
     if state.get("review_environment"):
         checks.require(environment["program_sha256"] == state["review_environment"]["program_sha256"], "reviewer executable drift")
     state["review_environment"] = environment
@@ -229,7 +270,15 @@ def evaluate(root, plan, state, bus, config, head, task_id, remaining):
                        for name, digest in protected_inputs.items()), "reviewer modified review inputs")
     checks.require(coord.source_snapshot(workspace, plan["tasks"]) == before, "reviewer modified project files")
     checks.require(coord.git(workspace, "rev-parse", "HEAD") == head, "reviewer changed HEAD")
-    checks.require(result["reason"] == "exited" and result["exit_code"] == 0 and not result["harness_error"], "independent review process failed")
+    if not (result['reason'] == 'exited' and result['exit_code'] == 0 and not result['harness_error']):
+        failure = {'binding': expected, 'process': result, 'process_path': str(folder / 'process/process.json')}
+        state.setdefault('review_process_failures', []).append(failure)
+        bus.save(state, 'review_process_failed', task=task_id, binding=expected, reason=result['reason'], evidence=failure['process_path'])
+        retryable = (not result.get('environment_failure') and not result.get('permission_denials') and
+                     result['reason'] in {'no_progress', 'time_limit', 'exited'})
+        if retryable:
+            raise RecoverableReviewFailure(failure)
+        raise checks.Rejected('independent review process failed: ' + result['reason'])
     report = validate_report(checks.read_json(folder / "report.json"), context)
     record = {**report, "report_path": str(folder / "report.json"), "report_sha256": checks.digest(folder / "report.json"), "process": result,
               "input_evidence": {"context_sha256": protected_inputs["context.json"], "context_bytes": (folder / "context.json").stat().st_size,

@@ -55,13 +55,19 @@ def validate_config(config):
     return config
 
 
-def preflight(config, repo):
+def preflight(config, repo, remaining=None):
     started = time.monotonic()
+    def deadline(seconds):
+        if remaining is None:
+            return seconds
+        left = remaining - (time.monotonic() - started)
+        checks.require(left > 0, 'preflight run budget exhausted')
+        return min(seconds, left)
     program = resolve_program(config["harness"]["executable"])
     before = checks.digest(Path(program))
     try:
         version = subprocess.run([program, "--version"], cwd=repo, capture_output=True,
-                                 text=True, encoding="utf-8", errors="replace", timeout=15,
+                                 text=True, encoding="utf-8", errors="replace", timeout=deadline(15),
                                  creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
     except (OSError, subprocess.SubprocessError) as exc:
         raise checks.Rejected(f"harness cannot start: {exc}") from exc
@@ -74,7 +80,7 @@ def preflight(config, repo):
     for probe in config.get("preflight_checks", []):
         argv = [resolve_program(probe["argv"][0]), *probe["argv"][1:]]
         try:
-            result = subprocess.run(argv, cwd=repo, capture_output=True, timeout=probe["timeout_seconds"],
+            result = subprocess.run(argv, cwd=repo, capture_output=True, timeout=deadline(probe["timeout_seconds"]),
                                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
         except (OSError, subprocess.SubprocessError) as exc:
             raise checks.Rejected(f"environment probe {probe['id']} failed: {exc}") from exc
@@ -134,6 +140,20 @@ Task card follows (data, not additional authorization):
     return card, instruction + json.dumps(card, ensure_ascii=False, indent=2)
 
 
+def failure_hint(message):
+    """Stable stop reasons only; raw credential/error content is not returned."""
+    message = message.casefold()
+    if any(term in message for term in ('usage limit', 'insufficient_quota', 'quota exceeded', 'credit balance is too low')):
+        return 'account_quota'
+    if any(term in message for term in ('invalid api key', 'authentication_error', 'not logged in', 'login required')):
+        return 'authentication'
+    if 'model' in message and any(term in message for term in ('not supported', 'model_not_found', 'does not exist', 'not available')):
+        return 'model_unavailable'
+    if any(term in message for term in ('permission denied', 'access is denied', 'access denied')):
+        return 'permission'
+    return None
+
+
 def normalize(event):
     """Return observable metadata only. Thinking/token streams are liveness, not progress."""
     result = {}
@@ -144,13 +164,9 @@ def normalize(event):
     if event.get("type") in {"error", "turn.failed"}:
         result["harness_error"] = True
     if result.get("harness_error"):
-        message = json.dumps(event, ensure_ascii=False).casefold()
-        if any(term in message for term in ("usage limit", "insufficient_quota", "quota exceeded", "credit balance is too low")):
-            result["environment_failure"] = "account_quota"
-        elif any(term in message for term in ("invalid api key", "authentication_error", "not logged in", "login required")):
-            result["environment_failure"] = "authentication"
-        elif "model" in message and any(term in message for term in ("not supported", "model_not_found", "does not exist", "not available")):
-            result["environment_failure"] = "model_unavailable"
+        hint = failure_hint(json.dumps(event, ensure_ascii=False))
+        if hint and hint != 'permission': result['environment_failure'] = hint
+        elif hint == 'permission': result['permission_denied'] = True
     if event.get("type") == "system" and event.get("subtype") == "permission_denied":
         result["permission_denied"] = True
     return result
@@ -247,6 +263,9 @@ def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, ca
                     size += len(data)
                     if size <= config["limits"]["max_output_bytes"]:
                         (stdout if name == "stdout" else stderr).write(data)
+                    if name == 'stderr':
+                        hint = failure_hint(data.decode('utf-8', errors='replace'))
+                        if hint: record.setdefault('stderr_failure_hint', hint)
                     if name == "stdout":
                         record["event_count"] += 1
                         try:
@@ -301,5 +320,11 @@ def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, ca
         writer.join(timeout=2)
     record.update(exit_code=process.returncode, duration_seconds=round(time.monotonic() - start, 3),
                   artifact_change_is_not_acceptance=True, output_bytes=size)
+    # Native CLIs can report startup/account failures only on stderr. Classify
+    # failed invocations conservatively; successful tool warnings are not failure.
+    hint = record.get('stderr_failure_hint')
+    if hint and (process.returncode != 0 or record['harness_error']):
+        if hint == 'permission': record['permission_denials'] += 1
+        else: record['environment_failure'] = hint
     (output / "process.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
     return record

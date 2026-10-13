@@ -58,6 +58,9 @@ def validate(plan):
     checks.require(limits.get("cost_limit") is None, "provider-independent billing cap is unsupported")
     if plan.get("review"):
         checks.integer(plan["review"]["max_rounds"], "review.max_rounds")
+        retries = plan['review'].get('max_recovery_attempts', 0)
+        checks.integer(retries, 'review.max_recovery_attempts', minimum=0)
+        checks.require(retries <= 2, 'review recovery is limited to two retries per binding')
         if 'base_commit' in plan['review']:
             value = plan['review']['base_commit']
             checks.require(isinstance(value, str) and len(value) in (40, 64) and all(c in '0123456789abcdef' for c in value),
@@ -111,8 +114,23 @@ def validate(plan):
         visit(tid)
     policy = replan.policy(plan)
     preparation = policy["preparation_checks"] if policy else []
+    assurance = plan.get('assurance', {})
+    checks.require(isinstance(assurance, dict) and set(assurance) <= {'checks', 'max_final_repairs'}, 'unknown assurance policy')
+    repairs = assurance.get('max_final_repairs', 0)
+    checks.integer(repairs, 'assurance.max_final_repairs', minimum=0)
+    checks.require(repairs <= 2, 'final assurance repairs are limited to two rounds')
+    assurance_checks = assurance.get('checks', [])
+    checks.require(isinstance(assurance_checks, list), 'assurance.checks must be a list')
+    seen = {(t['id'], c['id']) for t in tasks.values() for c in t['verification']}
+    for item in assurance_checks:
+        checks.require(isinstance(item, dict) and item.get('task_id') in tasks, 'assurance check needs an existing task owner')
+        checks.text(item.get('risk'), 'assurance.risk')
+        checks.identifier(item.get('id'), 'assurance.check.id')
+        key = (item['task_id'], item.get('id'))
+        checks.require(key not in seen, 'duplicate assurance check for task')
+        seen.add(key)
     checks.require(len({c["id"] for c in preparation}) == len(preparation), "duplicate preparation check")
-    for item in [c for t in tasks.values() for c in t["verification"]] + plan.get("integration_checks", []) + preparation:
+    for item in [c for t in tasks.values() for c in t["verification"]] + plan.get("integration_checks", []) + preparation + assurance_checks:
         checks.identifier(item["id"], "check.id")
         checks.relative_path(item.get("cwd", "."), "check.cwd", allow_dot=True)
         checks.strings(item["argv"], "check.argv", nonempty=True)
@@ -151,7 +169,7 @@ def initialize(plan_path, runtime_path, root):
     for task in tasks.values():
         for check in task["verification"]:
             protected.update(a for a in check["argv"][1:] if Path(a).is_absolute() and Path(a).is_file())
-    for check in plan.get("integration_checks", []) + plan.get("replanning", {}).get("preparation_checks", []):
+    for check in plan.get("integration_checks", []) + plan.get("replanning", {}).get("preparation_checks", []) + plan.get('assurance', {}).get('checks', []):
         protected.update(a for a in check["argv"][1:] if Path(a).is_absolute() and Path(a).is_file())
     for config in configs.values():
         protected.update(config.get("protected_files", []))
@@ -226,6 +244,9 @@ def verify(plan, ids, workspace, output, remaining, final=False):
     before = source_snapshot(workspace, plan["tasks"])
     records = []
     items = [(t["id"], c) for t in plan["tasks"] if t["id"] in ids for c in t["verification"]]
+    # Supplemental risk checks are pinned before dispatch. The normal task
+    # failure path owns repair, attempts and evidence; original checks stay intact.
+    items += [(c['task_id'], c) for c in plan.get('assurance', {}).get('checks', []) if c['task_id'] in ids]
     if final:
         items += [("integration", c) for c in plan.get("integration_checks", [])]
     for tid, spec in items:
@@ -266,6 +287,7 @@ def worker_prompt(plan, task, entry, state):
     card = {"overall_goal": plan["goal"], "output_locale": locale.resolve(plan.get('locale')), "requirements_alignment": checks.check_requirements_alignment(plan),
             "requirements": [r for r in plan.get("requirements", []) if task["id"] in r["task_ids"]],
             "task": task, "attempt": entry["attempts"],
+            "assurance": [c for c in plan.get('assurance', {}).get('checks', []) if c['task_id'] == task['id']],
             "contracts": {n: state["contracts"][n] for n in task.get("contracts", [])},
             "milestones": state["milestones"], "peers": [{"id": t["id"], "module": t.get("module", t["id"]), "produces": t.get("produces", [])} for t in plan["tasks"]],
             "feedback": entry.get("feedback"), "worker_preflight": entry.get("worker_preflight"),
@@ -431,6 +453,34 @@ def record_failure(root, config, bus, tid, entry, reason, environment):
         entry["retry_gate"] = {"signature": diagnostic["signature"], "case_id": entry["failure_cases"][-1]["id"]}
         bus.send("coordinator", "blocked", {"attempt": entry["attempts"], "text": "Repeated failure requires diagnosis and a changed approach", "data": entry["retry_gate"]}, sender=tid)
     bus.event("task_attempt_failed", task=tid, attempt=entry["attempts"], reason=reason)
+
+
+def repair_assurance(root, plan, tasks, state, bus, config, records, remaining):
+    """Reopen only declared owners at a quiet checkpoint, under existing limits."""
+    maximum = plan.get('assurance', {}).get('max_final_repairs', 0)
+    failed = [r for r in records if r['result'] != 'passed']
+    known = {(c['task_id'], c['id']) for c in plan.get('assurance', {}).get('checks', [])}
+    if (not failed or not maximum or remaining <= 0 or (root / 'cancel.request').exists() or
+            len(state.get('assurance_repairs', [])) >= maximum or
+            any((r['task_id'], r['check_id']) not in known or r.get('timed_out') for r in failed)):
+        return False
+    owners = {r['task_id'] for r in failed}
+    if any(state['tasks'][tid]['attempts'] >= plan['limits']['max_attempts'] or
+           state['tasks'][tid].get('needs_human') or state['tasks'][tid].get('retry_gate') for tid in owners):
+        return False
+    item = {'head': state['integration_head'], 'owners': sorted(owners), 'failed_checks': failed}
+    state.setdefault('assurance_repairs', []).append(item)
+    for tid in owners:
+        entry = state['tasks'][tid]
+        entry['last_checks'] = [r for r in failed if r['task_id'] == tid]
+        record_failure(root, config, bus, tid, entry, 'Post-integration assurance failed', state['environment'])
+        entry.pop('human_review', None);entry.pop('review_head', None)
+        for milestone in tasks[tid].get('produces', []): state['milestones'].pop(milestone, None)
+    # Other accepted implementations remain in the branch. Fresh complete
+    # verification and whole-branch review are required after owner repair.
+    state.pop('final_checks', None);state.pop('final_review', None);state.pop('final_audit_head', None)
+    bus.save(state, 'assurance_repair_scheduled', owners=sorted(owners), evidence=[r['evidence_path'] for r in failed])
+    return True
 
 
 def committed_status(task, entry):
@@ -610,7 +660,31 @@ def run(root):
             return 0
         started = time.monotonic()
         available = lambda: max(0, plan["limits"]["max_run_seconds"] - state["elapsed_seconds"] - (time.monotonic() - started))
-        environment = runtime.preflight(configs["worker"], repo)
+        if available() <= 0:
+            # Human responses were consumed above. Persist them even when no
+            # budget remains; do not turn an exhausted run into a new preflight.
+            state['status'] = 'partial'
+            bus.save(state, 'run_budget_exhausted')
+            memory.atomic_json(root / 'delivery.json', {'status': state['status'], 'run_id': plan['run_id'],
+                'branch': state['integration_branch'], 'head': state['integration_head'], 'tasks': state['tasks'],
+                'final_checks': [], 'note': 'Response/state retained; original time budget exhausted, no task dispatched.'})
+            return 3
+        try:
+            environment = runtime.preflight(configs["worker"], repo, remaining=available())
+        except (checks.Rejected, OSError, ValueError) as exc:
+            # Failed startup never reaches the session finally block below.
+            # Persist its real time too, so repeated dispatch cannot renew budget.
+            spent = time.monotonic() - started
+            state['elapsed_seconds'] += spent
+            state['status'] = 'blocked_environment'
+            failure = {'reason': str(exc), 'duration_seconds': round(spent, 3)}
+            state.setdefault('preflight_failures', []).append(failure)
+            bus.save(state, 'run_preflight_failed', failure=failure)
+            memory.atomic_json(root / 'delivery.json', {'status': state['status'], 'run_id': plan['run_id'],
+                'branch': state['integration_branch'], 'head': state['integration_head'], 'tasks': state['tasks'],
+                'preflight_failures': state['preflight_failures'], 'final_checks': [],
+                'note': 'Environment preflight failed; elapsed time is retained and no task was dispatched.'})
+            raise
         if state.get("environment"):
             checks.require(environment["program_sha256"] == state["environment"]["program_sha256"], "worker executable drift")
         state.update(environment=environment, session_started=time.time(), status="running")
@@ -803,15 +877,34 @@ def run(root):
                 bus.save(state, "tick")
                 human.export(root, plan, tasks, state, bus)
                 if not active and not coordinator_future:
-                    if configs.get("reviewer") and all(e["status"] == "integrated" for e in state["tasks"].values()):
+                    if all(e['status'] == 'integrated' for e in state['tasks'].values()):
+                        if configs.get('reviewer'):
+                            try:
+                                assessed = review.evaluate(root, plan, state, bus, configs['reviewer'], state['integration_head'], 'integration', available())
+                                if assessed['decision'] != 'approve':
+                                    review.request_fixes(plan, state, bus, assessed)
+                                    continue
+                            except review.BaselineFailure as exc:
+                                if repair_assurance(root, plan, tasks, state, bus, configs['worker'], exc.records, available()):
+                                    continue
+                                state['final_review_error'] = str(exc)
+                                bus.event('final_review_failed', reason=str(exc));break
+                            except (checks.Rejected, OSError, ValueError, KeyError, TypeError) as exc:
+                                state['final_review_error'] = str(exc)
+                                bus.event('final_review_failed', reason=str(exc));break
                         try:
-                            assessed = review.evaluate(root, plan, state, bus, configs["reviewer"], state["integration_head"], "integration", available())
-                            if assessed["decision"] != "approve":
-                                review.request_fixes(plan, state, bus, assessed)
-                                continue
-                        except (checks.Rejected, OSError, ValueError, KeyError, TypeError) as exc:
-                            state["final_review_error"] = str(exc)
-                            bus.event("final_review_failed", reason=str(exc))
+                            load(root)
+                            token = uuid.uuid4().hex[:8]
+                            workspace = new_worktree(root, plan, f"workflow/{plan['run_id']}/audit-{token}", state['integration_head'], f'audit-{token}')
+                            records = verify(plan, set(tasks), workspace, root/'checks'/f'final-{token}', available(), final=True)
+                            state['final_checks'] = records;state['review_workspace'] = str(workspace)
+                            if not all(r['result'] == 'passed' for r in records):
+                                if repair_assurance(root, plan, tasks, state, bus, configs['worker'], records, available()):
+                                    continue
+                            else: state['final_audit_head'] = state['integration_head']
+                        except (checks.Rejected, OSError, ValueError) as exc:
+                            state['final_audit_error'] = str(exc)
+                            bus.event('final_audit_failed', reason=str(exc))
                     break
                 time.sleep(0.25)
             if active or coordinator_future:
@@ -834,13 +927,8 @@ def run(root):
             if configs.get("reviewer") and (state.get("final_review", {}).get("decision") != "approve" or state.get("final_review", {}).get("binding") != review.binding(plan, state, state["integration_head"], "integration")):
                 state["status"] = "partial"
             if state["status"] == "completed":
-                load(root)
-                token = uuid.uuid4().hex[:8]
-                workspace = new_worktree(root, plan, f"workflow/{plan['run_id']}/audit-{token}", state["integration_head"], f"audit-{token}")
-                records = verify(plan, set(tasks), workspace, root / "checks" / f"final-{token}", available(), final=True)
-                state["final_checks"] = records
-                state["review_workspace"] = str(workspace)
-                if not all(r["result"] == "passed" for r in records):
+                if (state.get('final_audit_head') != state['integration_head'] or not state.get('final_checks') or
+                        not all(r['result'] == 'passed' for r in state['final_checks'])):
                     state["status"] = "partial"
             rows = coverage.report(plan, state, lambda tid: human.review_valid(plan, tasks[tid], state, state["integration_head"]))
             if not all(r["status"] == "passed" for r in rows) and state["status"] == "completed":
@@ -871,6 +959,8 @@ def run(root):
                 "unresolved_messages": bus.unresolved(),
                 "requirements": rows, "human_requests": requests,
                 "plan_revisions": state.get("plan_revisions", []), "final_review": state.get("final_review"), "review_history": state.get("review_history", []),
+                "review_recoveries": state.get('review_recoveries', []), "review_process_failures": state.get('review_process_failures', []),
+                "assurance_repairs": state.get('assurance_repairs', []),
                 "note": "Local branches and independent evidence only. Worker messages do not establish acceptance; no remote writes."})
 
 

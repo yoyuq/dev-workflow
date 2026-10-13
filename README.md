@@ -4,7 +4,7 @@
 
 A portable development workflow for **Codex and Claude Code**. Install one Skill, describe your goal, and let the agent align requirements, plan concrete tasks, implement, verify, and continue from the results.
 
-The Skill includes eight task-specific modules and an optional Python controller for resumable work, coordinated Git branches, and a live dependency graph. **Version: 2.13.0 — developer preview.**
+The Skill includes eight task-specific modules and an optional Python controller for resumable work, coordinated Git branches, and a live dependency graph. **Version: 2.14.0 — developer preview.**
 
 ## What it does
 
@@ -112,6 +112,12 @@ python dev-workflow/scripts/workflow.py metrics --run-dir ../my-run
 This reads saved SDK usage and process timings without making model calls. Cached input is kept as a subset; missing usage from interrupted processes stays unknown. Provider-reported cost is separate from an actual invoice. Host rescue actions need an operator journal; absence of records does not prove zero intervention. See [metrics](dev-workflow/references/metrics.md).
 
 Version 2.13 also fixes the reviewer idle watchdog: distinct successful SDK tool completions count as read-only review activity. Reasoning, heartbeats, failures, and duplicate events do not extend idle time. Worker artifact tracking, hard time limits, acceptance checks, and independent review remain in place.
+
+## Automatic checks and bounded recovery
+
+Before an unattended run, the planning agent pins supplemental risk checks to their existing task owners. Checks exercise shared configuration/startup and actually execute delivered tests where applicable. Failure returns through the existing worker repair/evidence path; original acceptance remains enforced. A declared final-repair allowance can reopen a known owner at a quiet checkpoint and requires fresh full verification and whole-branch review.
+
+`review.max_recovery_attempts` permits 0–2 fresh-context retries per binding for recoverable process faults. Counts persist across resume, all calls consume the original review/time limits, and failed drafts cannot approve. Account/permission failure (including stderr), source/input drift and invalid reports remain blocking. Environment probes obey remaining time; failed startup time is retained. See [automatic assurance](dev-workflow/references/automatic-assurance.md). This does not guarantee discovery of every unknown defect or grant new permissions.
 
 ## Documentation
 

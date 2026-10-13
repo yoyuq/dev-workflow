@@ -2,7 +2,7 @@
 name: dev-workflow
 description: 实现或续接开发任务：用内置 grill-me 按项目复杂度对齐需求，拆成可验收任务并持续实施；支持当前会话、夜间准备、多分支协作和进度续接。不用于纯咨询、单独审查或编辑技能本身。
 metadata:
-  version: "2.13.0"
+  version: "2.14.0"
   compatibility: Codex and Claude Code with file and command tools; Python 3.10+ for the optional controller.
 ---
 
@@ -49,4 +49,6 @@ metadata:
 
 真实任务的耗时、模型用量和人工介入按 [metrics.md](references/metrics.md) 记录，使用 `workflow.py metrics` 汇总 SDK usage 与缺失覆盖率。未知金额、被中断调用和宿主救援不能按零处理；新交付测试必须实际执行，启动修复必须核验真实共享配置。
 
-包版本 2.13.0 与协调计划 v2、旧串行计划 v4 是不同概念。[迁移和安装](references/portability.md) · [第三方来源与许可证](THIRD_PARTY.md)。用户当前指令和宿主规则优先；本包不会自行授予外部操作或权限变更。
+准备无人值守运行时，按 [自动检查与有限恢复](references/automatic-assurance.md) 固定补充风险检查及其任务负责人；总控检查失败后交回原工作者修复。需要有限审阅进程恢复时，在原计划声明 `review.max_recovery_attempts`，不扩预算或放宽批准条件。
+
+包版本 2.14.0 与协调计划 v2、旧串行计划 v4 是不同概念。[迁移和安装](references/portability.md) · [第三方来源与许可证](THIRD_PARTY.md)。用户当前指令和宿主规则优先；本包不会自行授予外部操作或权限变更。
