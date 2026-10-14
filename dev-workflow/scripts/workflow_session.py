@@ -6,6 +6,7 @@ import copy
 import hashlib
 import hmac
 from http.server import ThreadingHTTPServer
+from http.client import HTTPException
 from http.cookies import SimpleCookie, CookieError
 import json
 import os
@@ -289,7 +290,7 @@ def alive(root):
         checks.require(result['runs'][0]['id'] == read(root)['id'], 'wrong viewer')
         info['url'] = url
         return info
-    except (OSError, ValueError, KeyError, TypeError, checks.Rejected): return None
+    except (OSError, HTTPException, ValueError, KeyError, TypeError, checks.Rejected): return None
 
 
 def open_viewer(root):

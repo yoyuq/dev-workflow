@@ -9,7 +9,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import check_night_run as checks
 import workflow_session as session
@@ -175,6 +175,27 @@ class SessionTests(unittest.TestCase):
             while time.monotonic()<end and session.alive(self.root):time.sleep(.1)
         self.assertIsNone(session.alive(self.root))
         self.assertTrue((self.root/'session.sqlite3').exists())
+
+    def test_viewer_disconnect_during_response_is_unavailable_and_preserves_session(self):
+        # A closing local viewer can send headers, then disconnect before its
+        # declared body is complete. Exercise the actual HTTP reader, not a mock.
+        class ClosingViewer(BaseHTTPRequestHandler):
+            protocol_version='HTTP/1.0'
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header('Content-Length','214')
+                self.end_headers()
+                self.close_connection=True
+            def log_message(self,*args):pass
+        server=ThreadingHTTPServer(('127.0.0.1',0),ClosingViewer)
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        before=session.read(self.root)
+        session.private_json(self.root/'viewer.json',{'port':server.server_port,'token':'test-only'})
+        try:
+            self.assertIsNone(session.alive(self.root))
+            self.assertEqual(session.read(self.root),before)
+        finally:
+            server.shutdown();server.server_close();thread.join()
 
 
 if __name__=='__main__':unittest.main()

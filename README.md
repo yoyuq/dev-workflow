@@ -144,3 +144,5 @@ Original workflow code, documentation, and the author's custom modules are [MIT 
 Thanks to [Matt Pocock](https://github.com/mattpocock/skills), [Leonxlnx](https://github.com/Leonxlnx/taste-skill), [Paul Bakaus](https://github.com/pbakaus/impeccable), and [ehmo](https://github.com/ehmo/platform-design-skills). Bundled modules are preserved local snapshots; their precise upstream commits are not known. This project is independent of those authors, OpenAI, and Anthropic.
 
 Version 2.14.1 also recognizes the observed SDK reconnect event as pending: a valid successful turn can resolve it, while terminal/account/permission failures and incomplete or malformed completion remain blocking. This avoids unnecessary worker retries after a recovered stream. Native case snapshots remain unchanged.
+
+The local viewer also treats a connection cut off during shutdown as unavailable instead of raising an uncaught HTTP error; actual truncated-response coverage protects session data.

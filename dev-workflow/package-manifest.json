@@ -166,7 +166,7 @@
     "scripts/test_workflow_review.py": "5a5ceaf6774e81552e78111e7291303aecefcfe7b02472355de67a8736ad7aed",
     "scripts/test_workflow_runner.py": "f11b6d13b3ec04c5dedc73d1ee94e0a82c9d577660a8cefeb6106d3fd6c6c868",
     "scripts/test_workflow_service.py": "a1b25dd9dd23365d2bd0d45b635d859c6921d2e4145c6a4c247decbbff8a6fd6",
-    "scripts/test_workflow_session.py": "c320b6d372e4ceb90d8b9575e7f3a7c34651bb1472c9119dafb41a4c7b36f8eb",
+    "scripts/test_workflow_session.py": "794247f7133183d843789a18049c1347c3986bd264fc768ff2547b212f074a6b",
     "scripts/workflow.py": "66c992f8954fb60497a39cddf909b529a2db9614e298d854a01dd14822b4c5a6",
     "scripts/workflow_bus.py": "0897a5576069656a65c1bc757abfd578bf28490cc3a3aefa8aa01185b498e9d0",
     "scripts/workflow_coordinator.py": "5b15ed2d8b012f7bb47a4abe3d35a394ba691bf1aaa16a41ecc3197bb24933a8",
@@ -189,7 +189,7 @@
     "scripts/workflow_runtime.py": "1770db0dca65d227f742d5c8eb07f1857fd52b61207231fd5b8fde24848c4f27",
     "scripts/workflow_self_test.py": "50471422db79f479776f5e5484a7e56fb4a967dddfb2ff87ebea89609e1187dd",
     "scripts/workflow_service.py": "b209ddcb8e395c74ba549491fce82b0c71eef920566d9a4470ba2d14b95e453d",
-    "scripts/workflow_session.py": "f792001b976cdeb48d8bb14889e88dd139f187ba3e35b9c8fabc7b85b5802382",
+    "scripts/workflow_session.py": "14623823c2289e2ef8bfdc41eda00f0bfe55594d8dfefc06e21ae91d06397a22",
     "scripts/workflow_titles.py": "b63416f2c94b8241e22a0faefbf944f6cb768ebafd05b5cd96127db06c9542a7",
     "SKILL.md": "067d4cc61e3508bdf17caee28bd68ab183a7dc01a5db0bf55ec2ced5a312af61",
     "THIRD_PARTY.md": "0985fab06412bfdc95285eab5cdeecb20778ee276bb9f1cce592e82dd9efd53a"
