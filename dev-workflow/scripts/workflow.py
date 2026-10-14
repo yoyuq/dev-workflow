@@ -56,6 +56,7 @@ def snapshot(root, *, state=None):
             "budget": {"elapsed_seconds": used, "remaining_seconds": max(0, plan["limits"]["max_run_seconds"] - used),
                        "max_attempts_per_task": plan["limits"]["max_attempts"], "review_rounds_used": state.get("review_rounds", 0)},
             "human_requests": requests, "branch": state["integration_branch"], "head": state["integration_head"],
+            "remote_git": coord.remote_git.summary(state), "remote_hold": state.get('remote_hold'),
             "delivery_path": str(root / "delivery.json"), "cancelled": cancelled,
             "next_action": "respond" if requests else ("observe_running" if live else "inspect_and_recover" if state.get("session_started") else "review_delivery" if state["status"] == "completed" else "run_or_inspect_blocker")}
 

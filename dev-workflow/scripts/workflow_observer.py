@@ -14,7 +14,7 @@ MAX_BYTES = 65536
 MAX_ITEMS = 300
 PROCESS_KEYS = ('started_at', 'reason', 'exit_code', 'duration_seconds', 'environment_failure',
                 'permission_denials', 'harness_error', 'reported_model', 'first_artifact_seconds')
-EVENT_KEYS = ('task', 'attempt', 'reason', 'commit', 'head', 'status', 'round', 'case_id')
+EVENT_KEYS = ('task', 'attempt', 'reason', 'commit', 'head', 'status', 'round', 'case_id', 'pr', 'branch')
 
 
 def redact(value, secret=''):
@@ -274,7 +274,10 @@ def detail(service, job_id):
             'requires': spec.get('requires', []), 'produces': spec.get('produces', []),
             'activity': activities[tid], 'introduced_revision': origins.get(tid, 0),
             'support_for': spec.get('support_for'),
+            'support_kind': spec.get('support_kind'), 'split_children': spec.get('split_children', []),
+            'completion_kind': entry.get('completion_kind'),
             'attempts': entry['attempts'], 'commit': entry.get('commit'), 'reason': entry.get('reason', ''),
+            'feature_prs': [{k: p.get(k) for k in ('number', 'url', 'phase', 'head', 'merge_head', 'rollback_head', 'attempt')} for p in entry.get('feature_prs', [])],
             'next_step': advice(entry.get('reason', ''), entry['status']), 'processes': attempts,
             'checks': [{k: c.get(k) for k in ('check_id', 'result', 'exit_code', 'duration_seconds', 'timed_out')}
                        for c in entry.get('last_checks', [])],

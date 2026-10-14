@@ -1,0 +1,298 @@
+{
+  "note": "Synthetic protocol fixture captured by the unchanged frozen first 2.16 execution candidate; never run its synthetic argv.",
+  "base": {
+    "goal": "Preserve an approved history-query checkpoint",
+    "replanning": {
+      "max_revisions": 2,
+      "max_added_tasks": 4,
+      "max_total_attempts": 8,
+      "preparation_checks": [],
+      "allow_feature_split": true
+    },
+    "tasks": [
+      {
+        "id": "HISTORY",
+        "module": "backend",
+        "goal": "Filtered list and count",
+        "allowed_scope": [
+          "src/history.py"
+        ],
+        "depends_on": [
+          "SCHEMA"
+        ],
+        "requires": [
+          "schema-ready"
+        ],
+        "produces": [
+          "history-ready"
+        ],
+        "resources": [
+          "history"
+        ],
+        "contracts": [
+          "schema"
+        ],
+        "verification": [
+          {
+            "id": "list",
+            "argv": [
+              "python",
+              "/synthetic/fixed_check.py",
+              "{repo}",
+              "list"
+            ],
+            "timeout_seconds": 5
+          },
+          {
+            "id": "count",
+            "argv": [
+              "python",
+              "/synthetic/fixed_check.py",
+              "{repo}",
+              "count"
+            ],
+            "timeout_seconds": 5
+          }
+        ],
+        "internal_guides": []
+      },
+      {
+        "id": "SCHEMA",
+        "module": "data",
+        "goal": "Schema prerequisite",
+        "allowed_scope": [
+          "src/schema.py"
+        ],
+        "depends_on": [],
+        "verification": [
+          {
+            "id": "schema",
+            "argv": [
+              "python",
+              "/synthetic/fixed_check.py",
+              "{repo}",
+              "schema"
+            ],
+            "timeout_seconds": 5
+          }
+        ],
+        "produces": [
+          "schema-ready"
+        ]
+      }
+    ]
+  },
+  "state": {
+    "plan_revisions": [
+      {
+        "number": 1,
+        "id": "checkpoint-split",
+        "proposal": {
+          "id": "checkpoint-split",
+          "expected_revision": 0,
+          "reason": "Recorded independent list and count behavior",
+          "add": [],
+          "dependencies": {},
+          "split": [
+            {
+              "parent": "HISTORY",
+              "reason": "Separate fixed behaviors while retaining original acceptance",
+              "children": [
+                {
+                  "id": "LIST",
+                  "goal": "Filtered history list",
+                  "allowed_scope": [
+                    "src/history.py"
+                  ],
+                  "checks": [
+                    "list"
+                  ],
+                  "depends_on": []
+                },
+                {
+                  "id": "COUNT",
+                  "goal": "History count",
+                  "allowed_scope": [
+                    "src/history.py"
+                  ],
+                  "checks": [
+                    "count"
+                  ],
+                  "depends_on": [
+                    "LIST"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "previous": "6685c3f157c6941a45d0a9d2765cdd2a2e597afa56424754403472036274a19f",
+        "digest": "3e2e6c5a4977fe0f27e47db127e0230f0ae371d6e1b9a5cf189cda51320dc7b9"
+      }
+    ]
+  },
+  "expected": {
+    "goal": "Preserve an approved history-query checkpoint",
+    "replanning": {
+      "max_revisions": 2,
+      "max_added_tasks": 4,
+      "max_total_attempts": 8,
+      "preparation_checks": [],
+      "allow_feature_split": true
+    },
+    "tasks": [
+      {
+        "id": "HISTORY",
+        "module": "backend",
+        "goal": "Filtered list and count",
+        "allowed_scope": [
+          "src/history.py"
+        ],
+        "depends_on": [
+          "SCHEMA",
+          "LIST",
+          "COUNT"
+        ],
+        "requires": [
+          "schema-ready"
+        ],
+        "produces": [
+          "history-ready"
+        ],
+        "resources": [
+          "history"
+        ],
+        "contracts": [
+          "schema"
+        ],
+        "verification": [
+          {
+            "id": "list",
+            "argv": [
+              "python",
+              "/synthetic/fixed_check.py",
+              "{repo}",
+              "list"
+            ],
+            "timeout_seconds": 5
+          },
+          {
+            "id": "count",
+            "argv": [
+              "python",
+              "/synthetic/fixed_check.py",
+              "{repo}",
+              "count"
+            ],
+            "timeout_seconds": 5
+          }
+        ],
+        "internal_guides": [],
+        "split_children": [
+          "LIST",
+          "COUNT"
+        ],
+        "split_dependencies": [
+          "SCHEMA"
+        ]
+      },
+      {
+        "id": "SCHEMA",
+        "module": "data",
+        "goal": "Schema prerequisite",
+        "allowed_scope": [
+          "src/schema.py"
+        ],
+        "depends_on": [],
+        "verification": [
+          {
+            "id": "schema",
+            "argv": [
+              "python",
+              "/synthetic/fixed_check.py",
+              "{repo}",
+              "schema"
+            ],
+            "timeout_seconds": 5
+          }
+        ],
+        "produces": [
+          "schema-ready"
+        ]
+      },
+      {
+        "id": "LIST",
+        "module": "backend",
+        "goal": "Filtered history list",
+        "support_for": "HISTORY",
+        "support_kind": "feature",
+        "allowed_scope": [
+          "src/history.py"
+        ],
+        "depends_on": [
+          "SCHEMA"
+        ],
+        "requires": [
+          "schema-ready"
+        ],
+        "produces": [],
+        "resources": [
+          "history"
+        ],
+        "contracts": [
+          "schema"
+        ],
+        "verification": [
+          {
+            "id": "list",
+            "argv": [
+              "python",
+              "/synthetic/fixed_check.py",
+              "{repo}",
+              "list"
+            ],
+            "timeout_seconds": 5
+          }
+        ],
+        "internal_guides": []
+      },
+      {
+        "id": "COUNT",
+        "module": "backend",
+        "goal": "History count",
+        "support_for": "HISTORY",
+        "support_kind": "feature",
+        "allowed_scope": [
+          "src/history.py"
+        ],
+        "depends_on": [
+          "SCHEMA",
+          "LIST"
+        ],
+        "requires": [
+          "schema-ready"
+        ],
+        "produces": [],
+        "resources": [
+          "history"
+        ],
+        "contracts": [
+          "schema"
+        ],
+        "verification": [
+          {
+            "id": "count",
+            "argv": [
+              "python",
+              "/synthetic/fixed_check.py",
+              "{repo}",
+              "count"
+            ],
+            "timeout_seconds": 5
+          }
+        ],
+        "internal_guides": []
+      }
+    ]
+  }
+}
