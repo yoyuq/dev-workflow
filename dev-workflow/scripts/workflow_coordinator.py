@@ -286,6 +286,27 @@ def ready(tid, tasks, state):
             all(n in state["milestones"] for n in task.get("requires", [])))
 
 
+def remote_slot_allows(tid, tasks, state, limits):
+    owner = state.get('remote_active_task')
+    if not owner or owner == tid or state['tasks'][owner]['status'] == 'integrated': return True
+    # A parent invalidated by child review must yield to its unfinished family,
+    # not deadlock on the serial slot or advance an unrelated feature.
+    entry = state['tasks'][owner]
+    if not tasks[owner].get('split_children') or entry['status'] != 'pending' or entry['attempts'] >= limits['max_attempts']:
+        return False
+    parent = tasks[tid].get('support_for')
+    while parent:
+        if parent == owner: return True
+        parent = tasks[parent].get('support_for')
+    return False
+
+
+def validation_only_allowed(task, entry, state):
+    if task.get('split_children'):
+        return all(state['tasks'][c]['status'] == 'integrated' for c in task['split_children'])
+    return bool(task.get('support_kind') == 'feature' and entry.get('revalidation_source'))
+
+
 def new_worktree(root, plan, branch, base, dirname):
     path = root / "workspaces" / dirname
     checks.require(not path.exists() and checks.inside(path.resolve(), (root / "workspaces").resolve()), "workspace collision/escape")
@@ -662,10 +683,10 @@ def verify_and_commit(root, plan, task, entry, state, bus, remaining):
     records = verify(plan, {task["id"]}, workspace, root / "checks" / f"task-{task['id']}-{entry['attempts']}", remaining)
     entry["last_checks"] = records
     checks.require(all(r["result"] == "passed" for r in records), "task verification failed")
-    if not names and task.get('split_children'):
+    if not names and validation_only_allowed(task, entry, state):
         checks.require(entry['baseline']['head'] == state['integration_head'], 'validation-only parent has stale work head')
         entry.update(status='verified', commit=state['integration_head'], verification_only=True)
-        bus.save(state, 'split_parent_verified', task=task['id'], commit=entry['commit'])
+        bus.save(state, 'split_parent_verified' if task.get('split_children') else 'dependent_verified', task=task['id'], commit=entry['commit'])
         return
     # Only reviewed changed paths: explicit file scopes may intentionally live
     # below an ignored directory. Never force-add an entire scope directory.
@@ -804,8 +825,7 @@ def run(root):
                         protocol.handoff(bus, tid, entry)
                         after = source_snapshot(workspace, plan["tasks"])
                         names = serial.require_scope(tasks[tid], entry["baseline"], after)
-                        checks.require(names or (tasks[tid].get('split_children') and
-                                       all(state['tasks'][c]['status'] == 'integrated' for c in tasks[tid]['split_children'])), "task produced no scoped changes")
+                        checks.require(names or validation_only_allowed(tasks[tid], entry, state), "task produced no scoped changes")
                         entry["status"] = "finished"
                         try:
                             entry["learning_proposals"] = learning.read_proposals(entry)
@@ -911,8 +931,7 @@ def run(root):
                     if state.get('remote_hold') or state.get("pending_replan") or len(active) >= plan["limits"]["parallelism"] or available() <= 0 or cancel.exists():
                         break
                     if remote_git.enabled(plan):
-                        owner = state.get('remote_active_task')
-                        if owner and state['tasks'][owner]['status'] != 'integrated' and tid != owner: continue
+                        if not remote_slot_allows(tid, tasks, state, plan['limits']): continue
                         if any(e['status'] in {'creating', 'running', 'finished', 'verified', 'awaiting_review'} for e in state['tasks'].values()): continue
                     if not ready(tid, tasks, state) or held & set(tasks[tid].get("resources", [])):
                         continue
@@ -924,6 +943,7 @@ def run(root):
                     entry = state["tasks"][tid]
                     if remote_git.enabled(plan): state['remote_active_task'] = tid
                     entry["attempts"] += 1
+                    entry['revalidation_source'] = entry.get('integrated_head') if entry.get('invalidated') and tasks[tid].get('support_kind') == 'feature' else None
                     entry["invalidated"] = False
                     entry.pop("review_head", None)
                     entry.pop("human_review", None)

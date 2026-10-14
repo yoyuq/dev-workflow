@@ -168,5 +168,35 @@ class PartitionTests(unittest.TestCase):
                         'ORIGINAL-DEPENDENCY':{'status':'integrated'}}, 'milestones':{}}
         self.assertFalse(coord.ready('X',tasks,state))
 
+    def test_parent_review_child_repair_revalidates_dependents_without_empty_pr_or_deadlock(self):
+        c=self.case;c.plan['partitioning']['thresholds']['max_changed_files']=2
+        c.plan['limits']['max_attempts']=3;c.plan['replanning']['max_total_attempts']=9
+        c.plan['tasks'][0]['goal']+=' Never deliver joint.txt containing unsafe.'
+        worker=Path(c.configs['worker']['harness']['args'][1]);source=worker.read_text()
+        source=source.replace("Path('a.txt').write_text('OK');Path('b.txt').write_text('OK')", "Path('a.txt').write_text('OK');Path('b.txt').write_text('OK');Path('joint.txt').write_text('unsafe')")
+        source=source.replace("elif tid=='X':Path('a.txt').write_text('OK')", "elif tid=='X':\n Path('a.txt').write_text('OK');Path('joint.txt').write_text('unsafe' if attempt==1 else 'safe')")
+        source=source.replace("'allowed_scope':[path],", "'allowed_scope':[path,'joint.txt'] if tid=='X' else [path],")
+        worker.write_text(source)
+        reviewer=c.base/'repair-reviewer.py'
+        reviewer.write_text(r'''
+import json,sys
+from pathlib import Path
+if '--version' in sys.argv:print('SIMULATED independently observed artifact safety');raise SystemExit(0)
+sys.stdin.read();c=json.loads(Path('context.json').read_text());w=Path(c['workspace'])
+unsafe=c['binding']['task_id']=='A' and (w/'joint.txt').read_text()=='unsafe'
+findings=[{'task_id':'X','file':'joint.txt','line':1,'category':'quality','severity':'blocking','reason':'Actual artifact contains unsafe, violating original delivery requirement'}] if unsafe else []
+Path('report.json').write_text(json.dumps({'binding':c['binding'],'decision':'changes_requested' if unsafe else 'approve',
+ 'summary':'Independent artifact content inspected against original requirement','findings':findings,'validation':['Read actual joint.txt and original requirement; original fixed baseline already executed']}))
+''')
+        c.configs['reviewer']['harness']['args']=['-B',str(reviewer)]
+        c.configs['reviewer']['protected_files'].append(str(reviewer))
+        coverage_for(c.plan);c.initialize();pins=checks.digest(c.root/'pins.json')
+        self.assertEqual(coord.run(c.root),0);state=c.state()
+        self.assertEqual(state['tasks']['A']['attempts'],3);self.assertEqual(state['tasks']['X']['attempts'],2)
+        self.assertEqual(state['tasks']['Y']['attempts'],2)
+        self.assertEqual(state['tasks']['Y']['completion_kind'],'revalidated_dependency')
+        self.assertEqual(c.api.merges,3);self.assertEqual(len(state['tasks']['Y']['feature_prs']),1)
+        self.assertEqual(checks.digest(c.root/'pins.json'),pins)
+
 
 if __name__=='__main__':unittest.main()

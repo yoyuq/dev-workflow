@@ -9,6 +9,8 @@
   "partition_kept": "Atomic branch retained",
   "split_parent_verified": "Original split task verified",
   "split_parent_regression_passed": "Full original regression passed",
+  "dependent_verified": "Dependent task reverified",
+  "dependent_regression_passed": "Dependent regression passed",
   "已发布": "Published",
   "已测试": "Tested",
   "已合并": "Merged",

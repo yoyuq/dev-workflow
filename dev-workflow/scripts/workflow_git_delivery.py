@@ -310,7 +310,12 @@ def integrate(root, plan, tasks, state, bus, tid, git, new_worktree, verify, acc
 def accept_split_parent(root, plan, tasks, state, bus, tid, git, new_worktree, verify, accept, remaining):
     """Accept original whole behavior on the actual work head; never publish an empty PR."""
     task = tasks[tid];entry = state['tasks'][tid];head = state['integration_head']
-    checks.require(task.get('split_children') and all(state['tasks'][c]['status'] == 'integrated' for c in task['split_children']), 'functional children not accepted')
+    grouped = bool(task.get('split_children'))
+    if grouped:
+        checks.require(all(state['tasks'][c]['status'] == 'integrated' for c in task['split_children']), 'functional children not accepted')
+    else:
+        checks.require(task.get('support_kind') == 'feature' and entry.get('revalidation_source') and
+                       git(Path(plan['repository']), 'merge-base', entry['revalidation_source'], head) == entry['revalidation_source'], 'validation-only child has no accepted dependency history')
     checks.require(entry['commit'] == head and git(Path(plan['repository']), 'rev-parse', state['integration_branch']) == head, 'split parent evidence has stale head')
     require_approval(plan, state, entry, tid)
     api = client(plan, remaining)
@@ -327,8 +332,8 @@ def accept_split_parent(root, plan, tasks, state, bus, tid, git, new_worktree, v
         save(bus, state, 'human_review_required', task=tid, head=head)
         return True
     if api.ref(state['integration_branch']) != head: raise Blocked('Remote work branch changed during split-parent acceptance')
-    entry['completion_kind'] = 'validated_children'
-    save(bus, state, 'split_parent_regression_passed', task=tid, head=head, children=task['split_children'])
+    entry['completion_kind'] = 'validated_children' if grouped else 'revalidated_dependency'
+    save(bus, state, 'split_parent_regression_passed' if grouped else 'dependent_regression_passed', task=tid, head=head, children=task.get('split_children', []))
     accept(plan, state, bus, tid, head)
     return True
 
