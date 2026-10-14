@@ -99,6 +99,7 @@ class HumanTests(unittest.TestCase):
     def test_manual_approval_releases_dependency_without_repeating_worker(self):
         plan, root, bus, tasks = self.manual(count=3)
         state = bus.state()
+        attempts_before = state['tasks']['A']['attempts']
         self.assertEqual(state["tasks"]["C"]["attempts"], 0)
         self.assertEqual(state["tasks"]["A"]["status"], "awaiting_review")
         ticket = self.ticket(root, plan, bus, tasks)
@@ -106,7 +107,7 @@ class HumanTests(unittest.TestCase):
         self.assertEqual(human.respond(root, response(ticket, "approve"))["status"], "applied")
         state = bus.state()
         self.assertEqual(state["status"], "completed")
-        self.assertEqual(state["tasks"]["A"]["attempts"], 1)
+        self.assertEqual(state["tasks"]["A"]["attempts"], attempts_before)
         self.assertEqual(state["tasks"]["C"]["attempts"], 1)
         self.assertTrue(all(r["status"] == "passed" for r in checks.read_json(root / "delivery.json")["requirements"]))
 
@@ -272,14 +273,20 @@ class HumanTests(unittest.TestCase):
         rejection = response(ticket, "reject")
         state = bus.state()
         state["tasks"]["C"].update(status="integrated", attempts=1)
+        # Peer setup can legitimately consume a retry before human review.
+        # Rejection must preserve the budget actually consumed, not assume 1.
+        attempts_before = {tid: entry['attempts'] for tid, entry in state['tasks'].items()}
+        elapsed_before = state['elapsed_seconds']
+        head_before = state['integration_head']
         # Use an existing dependent task's status to inspect transaction behavior.
         bus.save(state, "simulated_dependents")
         human.submit(root, rejection)
         human.consume(root, plan, tasks, state, bus)
         self.assertEqual(state["tasks"]["A"]["status"], "pending")
         self.assertEqual(state["tasks"]["C"]["status"], "pending")
-        self.assertEqual(state["tasks"]["A"]["attempts"], 1)
-        self.assertEqual(state["tasks"]["C"]["attempts"], 1)
+        self.assertEqual({tid: entry['attempts'] for tid, entry in state['tasks'].items()}, attempts_before)
+        self.assertEqual(state['elapsed_seconds'], elapsed_before)
+        self.assertEqual(state['integration_head'], head_before)
         self.assertTrue(state["tasks"]["C"]["invalidated"])
         self.assertIn("api-ready", state["milestones"])
         self.assertTrue(Path(state["tasks"]["A"]["workspace"]).exists())
