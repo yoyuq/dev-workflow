@@ -110,6 +110,7 @@ def build(plan, proposal):
                      'support_for': parent['id'], 'support_kind': 'feature',
                      'allowed_scope': copy.deepcopy(spec['allowed_scope']),
                      'depends_on': list(dict.fromkeys(original_dependencies + spec['depends_on'])),
+                     'inherited_dependencies': original_dependencies,
                      'requires': list(parent.get('requires', [])), 'produces': [],
                      'resources': list(parent.get('resources', [])), 'contracts': list(parent.get('contracts', [])),
                      'verification': [copy.deepcopy(original[k]) for k in spec['checks']],
@@ -123,7 +124,7 @@ def build(plan, proposal):
         checks.require(tid in tasks and isinstance(deps, list), "unknown task/dependencies")
         # Preparation edges are mandatory: the parent retains original acceptance.
         required = [t["id"] for t in tasks.values() if t.get("support_for") == tid]
-        tasks[tid]["depends_on"] = list(dict.fromkeys(deps + required + tasks[tid].get('split_dependencies', [])))
+        tasks[tid]["depends_on"] = list(dict.fromkeys(deps + required + tasks[tid].get('split_dependencies', []) + tasks[tid].get('inherited_dependencies', [])))
     checks.require(sum(bool(t.get("support_for")) for t in tasks.values()) <= bound["max_added_tasks"], "added-task budget exhausted")
     return result
 
@@ -175,13 +176,14 @@ def activate(base, plan, state, bus, proposal, validator):
             updated["tasks"][task["id"]]["status"] = "pending"
             if task.get('split_children') and not old[task['id']].get('split_children'):
                 updated['tasks'][task['id']]['split_base'] = state['integration_head']
+                updated['tasks'][task['id']]['reason'] = 'Awaiting functional children and original full acceptance'
     # The former owner must wait for its children; release the serial remote
     # dispatch slot without accepting its goal or dropping consumed attempts.
     owner = updated.get('remote_active_task')
     if owner and candidate['tasks'] != plan['tasks'] and any(t.get('support_for') == owner for t in candidate['tasks']):
         updated.pop('remote_active_task', None)
     updated.pop("final_checks", None)
-    updated["status"] = "ready"
+    updated["status"] = "running" if updated.get('session_started') else "ready"
     with bus.transaction():
         bus.save(updated, "plan_revised", revision=revision)
     state.clear()

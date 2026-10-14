@@ -156,5 +156,17 @@ class PartitionTests(unittest.TestCase):
         t['partition']['boundary']='independent'
         self.assertEqual(sizing.assess(c.plan,t)['recommendation'],'consider_split')
 
+    def test_child_prerequisites_cannot_be_removed_and_parent_human_gate_blocks_dispatch(self):
+        c=self.case;plan=copy.deepcopy(c.plan)
+        plan['tasks'][0]['depends_on']=['ORIGINAL-DEPENDENCY']
+        child=lambda tid,path,check:{'id':tid,'goal':'Original result','allowed_scope':[path], 'checks':[check], 'depends_on':[], 'partition':profile()}
+        proposal={'id':'dependency-split','expected_revision':0,'reason':'Separate original outputs', 'add':[],
+            'dependencies':{'X':[]},'split':[{'parent':'A','reason':'Independent outputs', 'children':[child('X','a.txt','a'),child('Y','b.txt','b')]}]}
+        candidate=replan.build(plan,proposal);tasks={t['id']:t for t in candidate['tasks']}
+        self.assertIn('ORIGINAL-DEPENDENCY',tasks['X']['depends_on'])
+        state={'tasks':{'A':{'status':'pending','needs_human':'Unresolved actual product choice'},'X':{'status':'pending'},
+                        'ORIGINAL-DEPENDENCY':{'status':'integrated'}}, 'milestones':{}}
+        self.assertFalse(coord.ready('X',tasks,state))
+
 
 if __name__=='__main__':unittest.main()

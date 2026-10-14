@@ -276,6 +276,11 @@ def failed_feedback(records):
 
 def ready(tid, tasks, state):
     task, entry = tasks[tid], state["tasks"][tid]
+    parent = task.get('support_for')
+    while parent:
+        if state['tasks'][parent].get('needs_human') or state['tasks'][parent].get('retry_gate'):
+            return False
+        parent = tasks[parent].get('support_for')
     return (entry["status"] == "pending" and not entry.get("needs_human") and not entry.get("retry_gate") and
             all(state["tasks"][d]["status"] == "integrated" for d in task.get("depends_on", [])) and
             all(n in state["milestones"] for n in task.get("requires", [])))

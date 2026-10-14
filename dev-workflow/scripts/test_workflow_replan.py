@@ -103,6 +103,15 @@ class ReplanTests(unittest.TestCase):
         self.bus.save(self.state, "simulated_corruption")
         with self.assertRaisesRegex(checks.Rejected, "drift"): coord.load(self.root)
 
+    def test_active_session_replan_keeps_running_status_and_clock(self):
+        self.state['session_started'] = 1234.5
+        self.state['status'] = 'running'
+        self.state['elapsed_seconds'] = 12
+        self.activate()
+        self.assertEqual(self.state['status'], 'running')
+        self.assertEqual(self.state['session_started'], 1234.5)
+        self.assertEqual(self.state['elapsed_seconds'], 12)
+
     def test_accepted_definition_and_state_are_preserved(self):
         self.state["tasks"]["A"].update(status="integrated", attempts=1, commit=self.plan["base_commit"])
         self.bus.save(self.state, "simulated_accepted_task")
