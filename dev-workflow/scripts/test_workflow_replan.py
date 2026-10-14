@@ -112,6 +112,10 @@ class ReplanTests(unittest.TestCase):
         self.assertEqual(self.state['session_started'], 1234.5)
         self.assertEqual(self.state['elapsed_seconds'], 12)
 
+    def test_existing_feature_split_checkpoint_replays_without_new_fields(self):
+        fixture = checks.read_json(Path(__file__).resolve().parents[1] / 'assets/feature-split-v1.fixture.json')
+        self.assertEqual(replan.materialize(fixture['base'], fixture['state']), fixture['expected'])
+
     def test_accepted_definition_and_state_are_preserved(self):
         self.state["tasks"]["A"].update(status="integrated", attempts=1, commit=self.plan["base_commit"])
         self.bus.save(self.state, "simulated_accepted_task")

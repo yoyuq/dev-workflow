@@ -110,7 +110,6 @@ def build(plan, proposal):
                      'support_for': parent['id'], 'support_kind': 'feature',
                      'allowed_scope': copy.deepcopy(spec['allowed_scope']),
                      'depends_on': list(dict.fromkeys(original_dependencies + spec['depends_on'])),
-                     'inherited_dependencies': original_dependencies,
                      'requires': list(parent.get('requires', [])), 'produces': [],
                      'resources': list(parent.get('resources', [])), 'contracts': list(parent.get('contracts', [])),
                      'verification': [copy.deepcopy(original[k]) for k in spec['checks']],
@@ -124,7 +123,10 @@ def build(plan, proposal):
         checks.require(tid in tasks and isinstance(deps, list), "unknown task/dependencies")
         # Preparation edges are mandatory: the parent retains original acceptance.
         required = [t["id"] for t in tasks.values() if t.get("support_for") == tid]
-        tasks[tid]["depends_on"] = list(dict.fromkeys(deps + required + tasks[tid].get('split_dependencies', []) + tasks[tid].get('inherited_dependencies', [])))
+        # Derive the immutable inherited edges from the existing owner record.
+        # Do not add a field to historical overlays: their digests must replay.
+        inherited = tasks.get(tasks[tid].get('support_for'), {}).get('split_dependencies', []) if tasks[tid].get('support_kind') == 'feature' else []
+        tasks[tid]["depends_on"] = list(dict.fromkeys(deps + required + tasks[tid].get('split_dependencies', []) + inherited))
     checks.require(sum(bool(t.get("support_for")) for t in tasks.values()) <= bound["max_added_tasks"], "added-task budget exhausted")
     return result
 
