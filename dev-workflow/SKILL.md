@@ -2,7 +2,7 @@
 name: dev-workflow
 description: 实现或续接开发任务：用内置 grill-me 按项目复杂度对齐需求，拆成可验收任务并持续实施；支持当前会话、夜间准备、多分支协作和进度续接。不用于纯咨询、单独审查或编辑技能本身。
 metadata:
-  version: "2.14.1"
+  version: "2.15.0"
   compatibility: Codex and Claude Code with file and command tools; Python 3.10+ for the optional controller.
 ---
 
@@ -43,6 +43,8 @@ metadata:
 
 单任务用 quick；多模块协作、受控重规划或需要完整独立审阅用 full。full 必须配置 reviewer；[coordination.md](references/coordination.md) 管理分支、消息与依赖。需要改实施路径才读 [replanning.md](references/replanning.md)，需要真实用户答复才读 [human-resume.md](references/human-resume.md)。不改目标、原验收、预算或旧运行的 pins；旧运行继续使用冻结版本。
 
+用户要求逐功能远程 PR 自动推进时，读 [功能子 PR](references/feature-prs.md)。先调查改进方向与远程仓库，再按用户可验收的功能拆任务。每次运行有一个专属工作分支；子 PR 经固定检查与独立审阅合并到它，实际合并后回归通过才推进下一功能。已授权的回归失败自动普通 revert、验证恢复、交回原任务修复重试；项目基线分支保留待审草稿 PR。远程操作由总控负责，工作者不自行 push/merge。
+
 失败证据与候选经验按 [learning-loop.md](references/learning-loop.md) 保存；未经匹配验收和独立支持不能提升为已验证经验。跨会话复用见 [memory.md](references/memory.md)，状态保存在项目/任务目录，不写 Skill 安装目录。服务部署仅在需要时读 [service.md](references/service.md)；安装 Skill 不会自动启动服务。
 
 查看进度和故障时使用 [运行看板](references/observability.md)，以流程图显示任务依赖与状态，点击节点再查看尝试、时间线和日志；日志现象与排查建议不能代替根因验证。
@@ -51,4 +53,4 @@ metadata:
 
 准备无人值守运行时，按 [自动检查与有限恢复](references/automatic-assurance.md) 固定补充风险检查及其任务负责人；总控检查失败后交回原工作者修复。需要有限审阅进程恢复时，在原计划声明 `review.max_recovery_attempts`，不扩预算或放宽批准条件。
 
-包版本 2.14.1 与协调计划 v2、旧串行计划 v4 是不同概念。[迁移和安装](references/portability.md) · [第三方来源与许可证](THIRD_PARTY.md)。用户当前指令和宿主规则优先；本包不会自行授予外部操作或权限变更。
+包版本 2.15.0 与协调计划 v2、旧串行计划 v4 是不同概念。[迁移和安装](references/portability.md) · [第三方来源与许可证](THIRD_PARTY.md)。用户当前指令和宿主规则优先；本包不会自行授予外部操作或权限变更。

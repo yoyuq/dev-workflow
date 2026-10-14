@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded, durable multi-branch coordination. No push, deployment, or main merge."""
+"""Bounded multi-branch coordination with optional authorized feature PR delivery."""
 from __future__ import annotations
 
 import argparse
@@ -27,6 +27,7 @@ import workflow_protocol as protocol
 import workflow_titles as titles
 import workflow_locale as locale
 import workflow_display as display
+import workflow_git_delivery as remote_git
 from workflow_bus import Bus, MAILBOX, encoded
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +49,8 @@ def validate(plan):
     checks.identifier(plan["run_id"], "run_id")
     for field in ("goal", "authorization_ref", "execution_plan"):
         checks.text(plan[field], field)
-    checks.require(plan["delivery"] == "branch_commit_and_report", "only local branch/report delivery supported")
+    checks.require(plan["delivery"] in {"branch_commit_and_report", "feature_prs"}, "unsupported delivery mode")
+    remote_git.validate(plan)
     checks.require(Path(plan["repository"]).is_absolute(), "repository must be absolute")
     checks.require(Path(plan["skill_root"]).is_absolute(), "skill_root must be absolute")
     limits = plan["limits"]
@@ -130,7 +132,7 @@ def validate(plan):
         checks.require(key not in seen, 'duplicate assurance check for task')
         seen.add(key)
     checks.require(len({c["id"] for c in preparation}) == len(preparation), "duplicate preparation check")
-    for item in [c for t in tasks.values() for c in t["verification"]] + plan.get("integration_checks", []) + preparation + assurance_checks:
+    for item in [c for t in tasks.values() for c in t["verification"]] + plan.get("integration_checks", []) + preparation + assurance_checks + plan.get('remote_git', {}).get('post_merge_checks', []):
         checks.identifier(item["id"], "check.id")
         checks.relative_path(item.get("cwd", "."), "check.cwd", allow_dot=True)
         checks.strings(item["argv"], "check.argv", nonempty=True)
@@ -150,7 +152,7 @@ def initialize(plan_path, runtime_path, root):
     tasks = validate(plan)
     checks.require(not any(t.get("support_for") for t in tasks.values()), "preparation tasks must be created by a validated revision")
     configs = checks.read_json(runtime_path)
-    if plan.get("execution_mode") == "full":
+    if plan.get("execution_mode") == "full" or remote_git.enabled(plan):
         checks.require(configs.get("reviewer"), "full mode requires an independent reviewer")
     runtime.validate_config(configs["worker"])
     if configs.get("coordinator"):
@@ -169,7 +171,7 @@ def initialize(plan_path, runtime_path, root):
     for task in tasks.values():
         for check in task["verification"]:
             protected.update(a for a in check["argv"][1:] if Path(a).is_absolute() and Path(a).is_file())
-    for check in plan.get("integration_checks", []) + plan.get("replanning", {}).get("preparation_checks", []) + plan.get('assurance', {}).get('checks', []):
+    for check in plan.get("integration_checks", []) + plan.get("replanning", {}).get("preparation_checks", []) + plan.get('assurance', {}).get('checks', []) + plan.get('remote_git', {}).get('post_merge_checks', []):
         protected.update(a for a in check["argv"][1:] if Path(a).is_absolute() and Path(a).is_file())
     for config in configs.values():
         protected.update(config.get("protected_files", []))
@@ -562,7 +564,10 @@ def recover(root):
         state["elapsed_seconds"] += max(0, time.time() - state["session_started"])
     intent = state.get("integration_intent")
     actual = git(repo, "rev-parse", state["integration_branch"])
-    if intent:
+    if intent and intent.get('remote'):
+        checks.require(actual in {intent['before'], intent.get('merged'), intent.get('rollback_head')}, 'unexpected local work ref during remote recovery')
+        # Retain the intent. Only run() may reconcile GitHub and fresh regression.
+    elif intent:
         if actual == intent["after"]:
             accept_integration(plan, state, bus, intent["task_id"], actual)
         else:
@@ -695,7 +700,22 @@ def run(root):
         cancel = root / "cancel.request"
         executor = ThreadPoolExecutor(max_workers=plan["limits"]["parallelism"] + 1)
         try:
+            state.pop('remote_hold', None)
+            if remote_git.enabled(plan):
+                try:
+                    remote_git.prepare(plan, state, bus, git, available)
+                    if state.get('integration_intent'):
+                        tid = state['integration_intent']['task_id']
+                        accepted = remote_git.settle(root, plan, tasks, state, bus, git, new_worktree, verify, accept_integration, available)
+                        if not accepted:
+                            entry = state['tasks'][tid]
+                            record_failure(root, configs['worker'], bus, tid, entry, entry['reason'], environment)
+                except remote_git.CIFailed as exc:
+                    record_failure(root, configs['worker'], bus, tid, state['tasks'][tid], str(exc), environment)
+                except remote_git.Blocked as exc:
+                    state['remote_hold'] = str(exc);bus.save(state, 'remote_delivery_blocked', reason=str(exc))
             while available() > 0 and not cancel.exists():
+                if state.get('remote_hold'): break
                 human.consume(root, plan, tasks, state, bus)
                 while not starts.empty():
                     tid, pid = starts.get()
@@ -782,6 +802,13 @@ def run(root):
                         except (checks.Rejected, OSError, ValueError) as exc:
                             record_failure(root, configs["worker"], bus, tid, entry, str(exc), environment)
                     if (entry["status"] == "verified" or (entry["status"] == "awaiting_review" and not entry.get("review_head") and not entry.get("needs_human"))) and not active and not coordinator_future:
+                        if remote_git.enabled(plan):
+                            try:
+                                remote_git.prepare_child(root, plan, tasks, state, bus, tid, git, new_worktree, verify, available)
+                            except remote_git.Blocked as exc:
+                                state['remote_hold'] = str(exc);bus.save(state, 'remote_delivery_blocked', task=tid, reason=str(exc));break
+                            except (checks.Rejected, OSError, ValueError) as exc:
+                                record_failure(root, configs['worker'], bus, tid, entry, str(exc), environment);continue
                         if configs.get("reviewer"):
                             try:
                                 assessed = review.evaluate(root, plan, state, bus, configs["reviewer"], entry["commit"], tid, available())
@@ -794,7 +821,19 @@ def run(root):
                                 learning.capture(root, configs["worker"], tid, entry, entry["reason"], environment)
                                 bus.event("review_failed", task=tid, reason=str(exc))
                                 continue
-                        if not integrate(root, plan, tasks, state, bus, tid, available()):
+                        if remote_git.enabled(plan):
+                            try:
+                                load(root);require_messages_consumed(bus, tid)
+                                accepted = remote_git.integrate(root, plan, tasks, state, bus, tid, git, new_worktree, verify, accept_integration, available)
+                                if not accepted:
+                                    record_failure(root, configs['worker'], bus, tid, entry, entry['reason'], environment)
+                            except remote_git.Blocked as exc:
+                                state['remote_hold'] = str(exc);bus.save(state, 'remote_delivery_blocked', task=tid, reason=str(exc));break
+                            except (checks.Rejected, OSError, ValueError) as exc:
+                                if state.get('integration_intent'):
+                                    state['remote_hold'] = str(exc);bus.save(state, 'remote_delivery_blocked', task=tid, reason=str(exc));break
+                                record_failure(root, configs['worker'], bus, tid, entry, str(exc), environment)
+                        elif not integrate(root, plan, tasks, state, bus, tid, available()):
                             learning.capture(root, configs["worker"], tid, entry, entry["reason"], environment)
                 # Finishing a process is not yet a quiet checkpoint: its result
                 # must first pass verification/review/integration. Retain a valid
@@ -832,8 +871,12 @@ def run(root):
                 held = {r for tid in active for r in tasks[tid].get("resources", [])}
                 order = sorted(tasks, key=lambda tid: -state["tasks"][tid]["priority"])
                 for tid in order:
-                    if state.get("pending_replan") or len(active) >= plan["limits"]["parallelism"] or available() <= 0 or cancel.exists():
+                    if state.get('remote_hold') or state.get("pending_replan") or len(active) >= plan["limits"]["parallelism"] or available() <= 0 or cancel.exists():
                         break
+                    if remote_git.enabled(plan):
+                        owner = state.get('remote_active_task')
+                        if owner and state['tasks'][owner]['status'] != 'integrated' and tid != owner: continue
+                        if any(e['status'] in {'creating', 'running', 'finished', 'verified', 'awaiting_review'} for e in state['tasks'].values()): continue
                     if not ready(tid, tasks, state) or held & set(tasks[tid].get("resources", [])):
                         continue
                     if plan.get("replanning") and sum(e["attempts"] for e in state["tasks"].values()) >= plan["replanning"]["max_total_attempts"]:
@@ -842,6 +885,7 @@ def run(root):
                         continue
                     load(root)
                     entry = state["tasks"][tid]
+                    if remote_git.enabled(plan): state['remote_active_task'] = tid
                     entry["attempts"] += 1
                     entry["invalidated"] = False
                     entry.pop("review_head", None)
@@ -896,7 +940,7 @@ def run(root):
                             load(root)
                             token = uuid.uuid4().hex[:8]
                             workspace = new_worktree(root, plan, f"workflow/{plan['run_id']}/audit-{token}", state['integration_head'], f'audit-{token}')
-                            records = verify(plan, set(tasks), workspace, root/'checks'/f'final-{token}', available(), final=True)
+                            records = remote_git.post_checks(root, plan, set(tasks), workspace, root/'checks'/f'final-{token}', verify, available) if remote_git.enabled(plan) else verify(plan, set(tasks), workspace, root/'checks'/f'final-{token}', available(), final=True)
                             state['final_checks'] = records;state['review_workspace'] = str(workspace)
                             if not all(r['result'] == 'passed' for r in records):
                                 if repair_assurance(root, plan, tasks, state, bus, configs['worker'], records, available()):
@@ -933,6 +977,11 @@ def run(root):
             rows = coverage.report(plan, state, lambda tid: human.review_valid(plan, tasks[tid], state, state["integration_head"]))
             if not all(r["status"] == "passed" for r in rows) and state["status"] == "completed":
                 state["status"] = "partial"
+            if remote_git.enabled(plan) and state['status'] == 'completed':
+                try:
+                    remote_git.finish(plan, state, bus, available)
+                except remote_git.Blocked as exc:
+                    state.update(status='partial', remote_hold=str(exc));bus.event('remote_delivery_blocked', reason=str(exc))
             try:
                 learning.finish(root, configs["worker"], plan, state, bus)
             except (checks.Rejected, ValueError, KeyError, TypeError, OSError) as exc:
@@ -961,7 +1010,8 @@ def run(root):
                 "plan_revisions": state.get("plan_revisions", []), "final_review": state.get("final_review"), "review_history": state.get("review_history", []),
                 "review_recoveries": state.get('review_recoveries', []), "review_process_failures": state.get('review_process_failures', []),
                 "assurance_repairs": state.get('assurance_repairs', []),
-                "note": "Local branches and independent evidence only. Worker messages do not establish acceptance; no remote writes."})
+                "remote_git": remote_git.summary(state), "remote_hold": state.get('remote_hold'),
+                "note": "Feature PRs merged only into the dedicated work branch; base PR remains draft." if remote_git.enabled(plan) else "Local branches and independent evidence only. Worker messages do not establish acceptance; no remote writes."})
 
 
 def main(argv=None):
