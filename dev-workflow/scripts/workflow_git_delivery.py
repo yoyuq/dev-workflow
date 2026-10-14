@@ -271,7 +271,10 @@ def require_reserve(plan, state, tasks, tid, remaining):
 def integrate(root, plan, tasks, state, bus, tid, git, new_worktree, verify, accept, remaining):
     if state.get('integration_intent'):
         return settle(root, plan, tasks, state, bus, git, new_worktree, verify, accept, remaining)
-    entry = state['tasks'][tid];pr = current(entry)
+    entry = state['tasks'][tid]
+    if entry.get('verification_only'):
+        return accept_split_parent(root, plan, tasks, state, bus, tid, git, new_worktree, verify, accept, remaining)
+    pr = current(entry)
     checks.require(pr and pr.get('validated'), 'published PR requires fresh fixed validation')
     require_approval(plan, state, entry, tid)
     api = client(plan, remaining);expected = state['integration_head']
@@ -302,6 +305,32 @@ def integrate(root, plan, tasks, state, bus, tid, git, new_worktree, verify, acc
                                  'candidate_tree': git(candidate, 'rev-parse', 'HEAD^{tree}'), 'pr': pr['number']}
     save(bus, state, 'feature_merge_prepared', task=tid, pr=pr['url'], head=entry['commit'])
     return settle(root, plan, tasks, state, bus, git, new_worktree, verify, accept, remaining)
+
+
+def accept_split_parent(root, plan, tasks, state, bus, tid, git, new_worktree, verify, accept, remaining):
+    """Accept original whole behavior on the actual work head; never publish an empty PR."""
+    task = tasks[tid];entry = state['tasks'][tid];head = state['integration_head']
+    checks.require(task.get('split_children') and all(state['tasks'][c]['status'] == 'integrated' for c in task['split_children']), 'functional children not accepted')
+    checks.require(entry['commit'] == head and git(Path(plan['repository']), 'rev-parse', state['integration_branch']) == head, 'split parent evidence has stale head')
+    require_approval(plan, state, entry, tid)
+    api = client(plan, remaining)
+    if api.ref(state['integration_branch']) != head: raise Blocked('Remote work branch changed before full split-parent acceptance')
+    token = uuid.uuid4().hex[:8]
+    workspace = new_worktree(root, plan, 'workflow/' + plan['run_id'] + '/parent-check-' + token, head, 'parent-check-' + token)
+    entry.update(candidate_workspace=str(workspace), review_head=head)
+    ids = {t for t, e in state['tasks'].items() if e['status'] == 'integrated'} | {tid}
+    records = post_checks(root, plan, ids, workspace, root/'checks'/('split-parent-' + tid + '-' + token), verify, remaining)
+    entry['integration_checks'] = records
+    checks.require(all(r['result'] == 'passed' for r in records), 'original full split-parent regression failed')
+    if not human.review_valid(plan, task, state, head):
+        entry.update(status='awaiting_review', reason='Review complete split-parent behavior')
+        save(bus, state, 'human_review_required', task=tid, head=head)
+        return True
+    if api.ref(state['integration_branch']) != head: raise Blocked('Remote work branch changed during split-parent acceptance')
+    entry['completion_kind'] = 'validated_children'
+    save(bus, state, 'split_parent_regression_passed', task=tid, head=head, children=task['split_children'])
+    accept(plan, state, bus, tid, head)
+    return True
 
 
 def require_approval(plan, state, entry, tid):

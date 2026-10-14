@@ -1,10 +1,12 @@
-# Feature PR delivery (GitHub, 2.15)
+# Feature PR delivery (GitHub, 2.16)
 
 Use this mode when the user wants the controller to publish, test and merge each feature into one dedicated work branch, then regress the real merged result before advancing. Ordinary local delivery remains `branch_commit_and_report`. No extra skill or Python dependency is required; Git and configured repository credentials are required.
 
 ## Interview and plan
 
 Use the bundled grill-me and [requirements alignment](requirements-alignment.md) first. Inspect the current project before proposing improvement directions: distinguish user-visible gaps, existing behavior and technical facts. Ask only unresolved product choices. Give each accepted improvement a concrete result, allowed scope, dependencies and fixed behavioral verification. A frontend/backend split alone is insufficient: each work package should deliver an independently reviewable functional result. Reuse prior answers and actual authorization; never fabricate user confirmation.
+
+For new runs, apply [functional task partitioning](task-partitioning.md): assess complexity, dependencies, uncertainty and recovery risk, record branch boundaries, and configure bounded runtime splitting when automatic repartitioning is wanted. Prefer original checks that can validate individual behaviors while retaining combined acceptance. A runtime split creates functional child PRs, retains the original owner for full acceptance and preserves original budgets; it cannot add product goals or acceptance commands. Existing frozen runs retain their original policy.
 
 Read `origin`, the remote base commit, repository merge settings, CI and branch rules. Pin the authorized remote URL and full baseline SHA. Record known baseline failures and agree their disposition; do not silently remove failing acceptance. Workers receive the functional goal, dependent accepted artifacts and actual failure evidence. They implement code; the Python controller owns GitHub publication and Git transactions.
 

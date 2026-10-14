@@ -3,6 +3,12 @@
   'use strict';
   const english={
   "功能 PR": "Feature PR",
+  "r{0} 新增 · 从 {1} 拆出的功能": "Added in r{0} · Feature split from {1}",
+  "子功能已交付，原任务完整验收通过": "Child features delivered; full original acceptance passed",
+  "partition_requested": "Branch sizing review requested",
+  "partition_kept": "Atomic branch retained",
+  "split_parent_verified": "Original split task verified",
+  "split_parent_regression_passed": "Full original regression passed",
   "已发布": "Published",
   "已测试": "Tested",
   "已合并": "Merged",

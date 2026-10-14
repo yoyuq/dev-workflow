@@ -4,7 +4,7 @@
 
 A portable development workflow for **Codex and Claude Code**. Install one Skill, describe your goal, and let the agent align requirements, plan concrete tasks, implement, verify, and continue from the results.
 
-The Skill includes eight task-specific modules and an optional Python controller for resumable work, coordinated Git branches, and a live dependency graph. **Version: 2.15.0 — developer preview.**
+The Skill includes eight task-specific modules and an optional Python controller for resumable work, coordinated Git branches, and a live dependency graph. **Version: 2.16.0 — developer preview.**
 
 ## What it does
 
@@ -14,6 +14,7 @@ The Skill includes eight task-specific modules and an optional Python controller
 - Tracks public progress in a dynamic graph with task details, attempts, events, and managed logs.
 - Supports a coordinator and communicating workers in separate Git worktrees, with dependency handling and independent review in full mode.
 - Optional [feature PR delivery](dev-workflow/references/feature-prs.md): test/review child PRs, merge each into one dedicated work branch, regress the actual remote merge, and revert/repair failed increments under the original budget. The parent PR stays draft. GitHub first; serial feature acceptance.
+- [Functional partitioning](dev-workflow/references/task-partitioning.md) considers complexity, dependencies and recovery risk. Runtime sizing can ask the AI coordinator to split original behaviors into child PRs, while retaining full original acceptance and budgets. Atomic changes can stay together with evidence.
 - Records checkpoints, failure evidence, and candidate lessons. Only supported lessons become verified reusable knowledge.
 - Can run through an independent controller and an event-driven service, including waiting for a real human answer and resuming from it.
 

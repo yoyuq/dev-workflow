@@ -274,6 +274,8 @@ def detail(service, job_id):
             'requires': spec.get('requires', []), 'produces': spec.get('produces', []),
             'activity': activities[tid], 'introduced_revision': origins.get(tid, 0),
             'support_for': spec.get('support_for'),
+            'support_kind': spec.get('support_kind'), 'split_children': spec.get('split_children', []),
+            'completion_kind': entry.get('completion_kind'),
             'attempts': entry['attempts'], 'commit': entry.get('commit'), 'reason': entry.get('reason', ''),
             'feature_prs': [{k: p.get(k) for k in ('number', 'url', 'phase', 'head', 'merge_head', 'rollback_head', 'attempt')} for p in entry.get('feature_prs', [])],
             'next_step': advice(entry.get('reason', ''), entry['status']), 'processes': attempts,
