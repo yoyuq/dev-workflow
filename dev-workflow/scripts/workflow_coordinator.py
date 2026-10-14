@@ -501,7 +501,7 @@ def accept_integration(plan, state, bus, tid, head):
 
 def _accept_integration(plan, state, bus, tid, head):
     entry = state["tasks"][tid]
-    entry.update(status="integrated", integrated_head=head, invalidated=False)
+    entry.update(status="integrated", integrated_head=head, invalidated=False, reason="")
     task = next(t for t in plan["tasks"] if t["id"] == tid)
     for milestone in task.get("produces", []):
         state["milestones"][milestone] = {"owner": tid, "commit": head, "verified": True}

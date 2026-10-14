@@ -120,6 +120,7 @@ class FeaturePRTests(unittest.TestCase):
         self.assertTrue(self.api.pr(s['remote_git']['parent_pr']['number'])['draft'])
         self.assertEqual(checks.digest(self.root/'pins.json'),pins)
         self.assertTrue(s['tasks']['A']['failure_cases'])
+        self.assertEqual(s['tasks']['A']['reason'],'')
         self.assertEqual(checks.read_json(self.root/'delivery.json')['remote_git']['prs'],s['remote_git']['prs'])
 
     def test_pending_ci_holds_following_feature_and_resumes_same_attempt(self):

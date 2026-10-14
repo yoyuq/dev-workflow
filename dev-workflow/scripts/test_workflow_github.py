@@ -23,8 +23,12 @@ class GitHubTests(unittest.TestCase):
         api.required_apps={'build':{1}}
         result=api.ci('head',['build']);self.assertEqual(result['state'],'pending');self.assertEqual(result['missing'],['build'])
     def test_inaccessible_protection_cannot_be_assumed_absent(self):
-        api=self.api([None,{'protected':True}])
+        api=self.api([None,{'protected':True},[]])
         with self.assertRaises(Blocked):api.required_checks('workflow/run/integration')
+    def test_readable_ruleset_policy_can_supply_required_check_binding(self):
+        api=self.api([None,{'protected':True},[{'type':'required_status_checks','parameters':{'required_status_checks':[{'context':'build','integration_id':7}]}}]])
+        self.assertEqual(api.required_checks('workflow/run/integration'),['build'])
+        self.assertEqual(api.required_apps,{'build':{7}})
     def test_truncated_ci_fails_closed(self):
         api=self.api([{'total_count':101},{'check_runs':[]}])
         with self.assertRaises(Blocked):api.ci('head',[])

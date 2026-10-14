@@ -160,8 +160,6 @@ class GitHub:
             if app is not None and app > 0: self.required_apps.setdefault(context, set()).add(app)
         policy = self.request('/branches/' + quote(branch, safe='') + '/protection', missing=True)
         branch_info = self.request('/branches/' + quote(branch, safe=''))
-        if branch_info.get('protected') and policy is None:
-            raise Blocked('Protected work branch policy is unavailable; do not use administrative bypass')
         if policy:
             reviews = policy.get('required_pull_request_reviews', {})
             if reviews.get('required_approving_review_count', 0) or reviews.get('require_code_owner_reviews') or policy.get('required_conversation_resolution', {}).get('enabled'):
@@ -170,6 +168,8 @@ class GitHub:
             required.update(status.get('contexts', []))
             for c in status.get('checks', []): bind(c['context'], c.get('app_id'))
         rules = self.request('/rules/branches/' + quote(branch, safe=''))
+        if branch_info.get('protected') and policy is None and not rules:
+            raise Blocked('Protected work branch policy is unavailable; do not use administrative bypass')
         for rule in rules:
             params = rule.get('parameters', {})
             if rule['type'] == 'merge_queue': raise Blocked('Work branch uses a merge queue; direct feature merging is unsupported')
