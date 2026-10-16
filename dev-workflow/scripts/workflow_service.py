@@ -78,6 +78,9 @@ class Service:
         checks.require(len(self.token) >= 32, "weak/missing service token")
         self.condition = threading.Condition()
         self.stopping = False
+        with self.db() as db:
+            columns = {row['name'] for row in db.execute('PRAGMA table_info(jobs)')}
+            if 'retry_at' not in columns: db.execute('ALTER TABLE jobs ADD COLUMN retry_at REAL')
 
     @contextmanager
     def db(self):
@@ -158,6 +161,12 @@ class Service:
     def claim(self):
         with self.db() as db:
             db.execute("BEGIN IMMEDIATE")
+            for waiting in db.execute("SELECT id,root,retry_at FROM jobs WHERE status='waiting_quota'").fetchall():
+                if (Path(waiting['root'])/'cancel.request').exists():
+                    db.execute("UPDATE jobs SET status='cancelled',retry_at=NULL WHERE id=?", (waiting['id'],))
+                elif waiting['retry_at'] is not None and waiting['retry_at'] <= time.time():
+                    db.execute("UPDATE jobs SET status='queued',retry_at=NULL,updated=? WHERE id=?", (time.time(),waiting['id']))
+                    self.event(db, waiting['id'], 'quota_retry_due')
             row = db.execute("SELECT * FROM jobs WHERE status='queued' ORDER BY updated,id LIMIT 1").fetchone()
             if not row: return None
             generation = row["generation"] + 1
@@ -172,14 +181,17 @@ class Service:
             if not row or row["generation"] != generation: return
             root = Path(row["root"])
             status, detail = "failed", f"controller exit {returncode}"
+            retry_at = None
             try:
                 snapshot = workflow.snapshot(root)
                 with Bus(root).connection() as run_db:
                     pending = run_db.execute("SELECT COUNT(*) FROM human_responses WHERE status='queued'").fetchone()[0]
                 status = "cancelled" if snapshot["cancelled"] else "queued" if pending else "completed" if snapshot["status"] == "completed" else "waiting" if snapshot["human_requests"] else "failed"
+                if status == 'failed' and snapshot['status'] == 'waiting_for_quota' and snapshot.get('quota_wait'):
+                    status, retry_at = 'waiting_quota', snapshot['quota_wait']['retry_at']
                 detail = encoded(snapshot)
             except (checks.Rejected, OSError, ValueError, KeyError) as exc: detail = str(exc)
-            db.execute("UPDATE jobs SET status=?,pid=NULL,updated=?,detail=? WHERE id=?", (status, time.time(), detail, jid))
+            db.execute("UPDATE jobs SET status=?,pid=NULL,updated=?,detail=?,retry_at=? WHERE id=?", (status, time.time(), detail, retry_at, jid))
             self.event(db, jid, "controller_finished", detail)
             self.condition.notify_all()
 
@@ -207,8 +219,11 @@ class Service:
             if self.dispatch_once(): continue
             # Completion wakes the next iteration; an idle service blocks on an event.
             with self.condition:
-                with self.db() as db: queued = db.execute("SELECT COUNT(*) FROM jobs WHERE status='queued'").fetchone()[0]
-                if not queued and not self.stopping: self.condition.wait()
+                with self.db() as db:
+                    queued = db.execute("SELECT COUNT(*) FROM jobs WHERE status='queued'").fetchone()[0]
+                    retry = db.execute("SELECT MIN(retry_at) FROM jobs WHERE status='waiting_quota'").fetchone()[0]
+                if not queued and not self.stopping:
+                    self.condition.wait(timeout=max(0,retry-time.time()) if retry is not None else None)
 
     def listing(self):
         with self.db() as db: rows = [dict(r) for r in db.execute("SELECT * FROM jobs ORDER BY updated DESC")]

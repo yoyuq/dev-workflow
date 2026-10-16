@@ -2,7 +2,7 @@
 name: dev-workflow
 description: 实现或续接开发任务：用内置 grill-me 按项目复杂度对齐需求，拆成可验收任务并持续实施；支持当前会话、夜间准备、多分支协作和进度续接。不用于纯咨询、单独审查或编辑技能本身。
 metadata:
-  version: "2.16.1"
+  version: "2.17.0"
   compatibility: Codex and Claude Code with file and command tools; Python 3.10+ for the optional controller.
 ---
 
@@ -42,6 +42,8 @@ metadata:
 用户要求夜间运行、独立进程、可恢复的多分支协作时，读 [entrypoint.md](references/entrypoint.md)。先用 `workflow.py setup` 生成配置，再用 `doctor` 检查；`doctor --live` 才实际调用模型并消耗额度。AI 准备计划和固定验收，确认真实环境可用后才派工。离线演示 `self-test` 是模拟工作者，不能代替真实模型或项目验收。
 
 单任务用 quick；多模块协作、受控重规划或需要完整独立审阅用 full。full 必须配置 reviewer；[coordination.md](references/coordination.md) 管理分支、消息与依赖。需要改实施路径才读 [replanning.md](references/replanning.md)，需要真实用户答复才读 [human-resume.md](references/human-resume.md)。不改目标、原验收、预算或旧运行的 pins；旧运行继续使用冻结版本。
+
+用户要求额度耗尽后自动推进时，按 [额度恢复](references/provider-recovery.md) 预先固定主备入口并启用quota_recovery，再把运行交给Python控制服务。主入口受限自动换备用；全部受限保存进度、退避等待并续跑同一实施尝试，不依赖人工点击。认证/代码错误不混为额度，原时限、返工次数和验收不刷新；旧运行不改pins就地升级。
 
 用户要求逐功能远程 PR 自动推进时，读 [功能子 PR](references/feature-prs.md)。先调查改进方向与远程仓库，再按用户可验收的功能拆任务。每次运行有一个专属工作分支；子 PR 经固定检查与独立审阅合并到它，实际合并后回归通过才推进下一功能。已授权的回归失败自动普通 revert、验证恢复、交回原任务修复重试；项目基线分支保留待审草稿 PR。远程操作由总控负责，工作者不自行 push/merge。
 

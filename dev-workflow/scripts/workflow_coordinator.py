@@ -29,6 +29,7 @@ import workflow_locale as locale
 import workflow_display as display
 import workflow_git_delivery as remote_git
 import workflow_partition as partition
+import workflow_providers as providers
 from workflow_bus import Bus, MAILBOX, encoded
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -163,6 +164,14 @@ def initialize(plan_path, runtime_path, root):
         runtime.validate_config(configs["coordinator"])
     if configs.get("reviewer"):
         runtime.validate_config(configs["reviewer"])
+    identities = {}
+    for config in configs.values():
+        if not providers.enabled(config): continue
+        for ident, candidate in providers.candidates(config):
+            identity = tuple(candidate['harness'].get(k) for k in ('kind','executable','model'))
+            checks.require(ident not in identities or identities[ident] == identity,
+                           'shared provider id must identify the same executable and model across roles')
+            identities[ident] = identity
     repo, skill = Path(plan["repository"]).resolve(), Path(plan["skill_root"]).resolve()
     checks.require(not checks.inside(root, repo) and not checks.inside(repo, root), "run directory and source checkout must not overlap")
     checks.require(not checks.inside(root, skill), "run directory must be outside Skill")
@@ -180,6 +189,7 @@ def initialize(plan_path, runtime_path, root):
     for config in configs.values():
         protected.update(config.get("protected_files", []))
         protected.update(a for a in config["harness"].get("args", []) if Path(a).is_absolute() and Path(a).is_file())
+        if providers.enabled(config): protected.update(providers.protected(config))
     for p in protected:
         checks.require(not checks.inside(Path(p).resolve(), repo), "independent inputs must be outside checkout")
     pins = {"plan": checks.digest(plan_path), "runtime": checks.digest(runtime_path),
@@ -652,13 +662,18 @@ def recover(root):
 
 def supervised_worker(root, key, *args, on_start):
     process_bus = Bus(root)
+    registered_keys = []
     def registered(pid):
-        process_bus.process_started(key, pid)
+        if registered_keys: process_bus.process_finished(registered_keys[-1])
+        actual_key = key + '-provider-' + uuid.uuid4().hex[:12] if providers.enabled(args[0]) else key
+        process_bus.process_started(actual_key, pid)
+        registered_keys.append(actual_key)
         on_start(pid)
     try:
-        return runtime.run_worker(*args, on_start=registered)
+        config = {**args[0], '_provider_state': str(root/'provider-cooldowns.sqlite3')}
+        return runtime.run_worker(config, *args[1:], on_start=registered)
     finally:
-        process_bus.process_finished(key)
+        for actual_key in registered_keys: process_bus.process_finished(actual_key)
 
 
 def stage_files(workspace, names):
@@ -731,6 +746,13 @@ def run(root):
                 'branch': state['integration_branch'], 'head': state['integration_head'], 'tasks': state['tasks'],
                 'final_checks': [], 'note': 'Response/state retained; original time budget exhausted, no task dispatched.'})
             return 3
+        if state.get('quota_wait'):
+            if state['quota_wait']['retry_at'] > time.time(): return 3
+            wait = state.pop('quota_wait')
+            state['quota_wait_seconds'] = state.get('quota_wait_seconds', 0) + max(0, time.time()-wait['since'])
+            for entry in state['tasks'].values():
+                if entry['status'] == 'quota_wait': entry['status'] = 'quota_resume'
+            bus.save(state, 'quota_retry_due', waited_seconds=state['quota_wait_seconds'])
         try:
             environment = runtime.preflight(configs["worker"], repo, remaining=available())
         except (checks.Rejected, OSError, ValueError) as exc:
@@ -801,9 +823,16 @@ def run(root):
                     try:
                         process = future.result()
                         entry.update(pid=None, process=process)
+                        if providers.enabled(configs['worker']):
+                            entry['quota_attempt_elapsed_seconds'] = entry.get('quota_attempt_elapsed_seconds',0) + process['duration_seconds']
                         entry["history"].append({"attempt": entry["attempts"], "workspace": str(workspace), "process": process})
                         checks.require(not entry.get("mailbox_error"), "invalid worker mailbox: " + str(entry.get("mailbox_error")))
                         bus.ingest(tid, entry["attempts"], workspace, tasks)
+                        if process.get('quota_retry_at') and providers.enabled(configs['worker']):
+                            serial.require_scope(tasks[tid], entry['baseline'], source_snapshot(workspace, plan['tasks']))
+                            entry.update(status='quota_wait', reason='Provider quota; preserved same attempt and workspace')
+                            providers.pause(state, bus, process['quota_retry_at'], task=tid)
+                            continue
                         if process.get("environment_failure"):
                             entry.update(status="blocked", reason=process["environment_failure"])
                             state["status"] = "blocked_environment"
@@ -839,9 +868,15 @@ def run(root):
                     result = coordinator_future.result()
                     state.update(coordinator_pid=None, coordinator_active=False)
                     try:
+                        if result.get('quota_retry_at'):
+                            state['coordinator_quota_rounds'] = state.get('coordinator_quota_rounds', 0) + 1
+                            providers.pause(state, bus, result['quota_retry_at'], task='coordinator')
+                            raise providers.QuotaWait(result['quota_retry_at'])
                         checks.require(result["reason"] == "exited" and result["exit_code"] == 0 and not result["harness_error"], "coordinator invocation failed")
                         decision = checks.read_json(coordinator_output / "decision.json")
                         apply_decisions(plan, tasks, state, bus, decision, {m["id"] for m in coordinator_requests})
+                    except providers.QuotaWait:
+                        pass
                     except (checks.Rejected, OSError, ValueError, KeyError, TypeError) as exc:
                         bus.event("coordinator_failed", reason=str(exc))
                     coordinator_future = None
@@ -873,6 +908,9 @@ def run(root):
                                     review.request_fixes(plan, state, bus, assessed)
                                     learning.capture(root, configs["worker"], tid, entry, "Independent review requested changes", environment)
                                     continue
+                            except providers.QuotaWait as exc:
+                                providers.pause(state, bus, exc.retry_at, task=tid)
+                                break
                             except (checks.Rejected, OSError, ValueError, KeyError, TypeError) as exc:
                                 entry.update(status="blocked", reason="Independent review unavailable: " + str(exc))
                                 learning.capture(root, configs["worker"], tid, entry, entry["reason"], environment)
@@ -892,6 +930,8 @@ def run(root):
                                 record_failure(root, configs['worker'], bus, tid, entry, str(exc), environment)
                         elif not integrate(root, plan, tasks, state, bus, tid, available()):
                             learning.capture(root, configs["worker"], tid, entry, entry["reason"], environment)
+                if state.get('quota_wait') and not active and not coordinator_future:
+                    break
                 # Finishing a process is not yet a quiet checkpoint: its result
                 # must first pass verification/review/integration. Retain a valid
                 # proposal across that barrier instead of rejecting and losing it.
@@ -907,7 +947,7 @@ def run(root):
                 if informational:
                     bus.ack("coordinator", informational)
                 pending = [m for m in pending if m["kind"] in {"question", "blocked", "change_request"} and not m["resolved"] and not state["tasks"][m["sender"]].get("needs_human")]
-                if pending and not coordinator_future and configs.get("coordinator") and state["coordinator_rounds"] < plan["limits"]["max_coordinator_rounds"]:
+                if pending and not state.get('quota_wait') and not coordinator_future and configs.get("coordinator") and state["coordinator_rounds"] - state.get('coordinator_quota_rounds',0) < plan["limits"]["max_coordinator_rounds"]:
                     state["coordinator_rounds"] += 1
                     coordinator_output = root / "decisions" / str(state["coordinator_rounds"])
                     coordinator_output.mkdir(parents=True)
@@ -928,7 +968,7 @@ def run(root):
                 held = {r for tid in active for r in tasks[tid].get("resources", [])}
                 order = sorted(tasks, key=lambda tid: -state["tasks"][tid]["priority"])
                 for tid in order:
-                    if state.get('remote_hold') or state.get("pending_replan") or len(active) >= plan["limits"]["parallelism"] or available() <= 0 or cancel.exists():
+                    if state.get('quota_wait') or state.get('remote_hold') or state.get("pending_replan") or len(active) >= plan["limits"]["parallelism"] or available() <= 0 or cancel.exists():
                         break
                     if remote_git.enabled(plan):
                         if not remote_slot_allows(tid, tasks, state, plan['limits']): continue
@@ -943,6 +983,8 @@ def run(root):
                     entry = state["tasks"][tid]
                     if remote_git.enabled(plan): state['remote_active_task'] = tid
                     entry["attempts"] += 1
+                    entry.pop('quota_attempt_elapsed_seconds', None)
+                    entry.pop('quota_resumptions', None)
                     entry['revalidation_source'] = entry.get('integrated_head') if entry.get('invalidated') and tasks[tid].get('support_kind') == 'feature' else None
                     entry["invalidated"] = False
                     entry.pop("review_head", None)
@@ -978,6 +1020,25 @@ def run(root):
                         prompt, output, lambda w=workspace, t=tasks[tid]: fast_snapshot(w, t), available(), CancelFlags(cancel, Path(entry["cancel_path"])),
                         on_start=lambda pid, t=tid: starts.put((t, pid)))
                     held.update(tasks[tid].get("resources", []))
+                # A quota wait resumes the exact draft and attempt. Provider
+                # probes have their own evidence; they are not code-repair tries.
+                for tid, entry in state['tasks'].items():
+                    if entry['status'] != 'quota_resume' or state.get('quota_wait') or cancel.exists() or len(active) >= plan['limits']['parallelism'] or available() <= 0:
+                        continue
+                    if held & set(tasks[tid].get('resources', [])): continue
+                    load(root)
+                    workspace = Path(entry['workspace'])
+                    serial.require_scope(tasks[tid], entry['baseline'], source_snapshot(workspace, plan['tasks']))
+                    entry['quota_resumptions'] = entry.get('quota_resumptions', 0) + 1
+                    entry['worker_preflight']['started_at'] = time.time()
+                    entry.update(status='running', pid=None, reason='Resuming preserved draft after provider cooldown')
+                    output = root/'attempts'/tid/str(entry['attempts'])/'quota-resumes'/str(entry['quota_resumptions'])
+                    prompt = worker_prompt(plan, tasks[tid], entry, state) + '\nResume this exact workspace after quota wait. Preserve prior changes and original task scope; do not reuse an outbox message ID.\n'
+                    bus.deliver(tid, workspace, state['contracts'])
+                    bus.save(state, 'quota_worker_resumed', task=tid, attempt=entry['attempts'], resumption=entry['quota_resumptions'])
+                    active[tid] = executor.submit(supervised_worker, root, f"{tid}-{entry['attempts']}", configs['worker'], workspace, Path(plan['skill_root']), prompt, output,
+                        lambda w=workspace,t=tasks[tid]: fast_snapshot(w,t), max(0,min(available(),configs['worker']['limits']['attempt_seconds']-entry.get('quota_attempt_elapsed_seconds',0))), CancelFlags(cancel,Path(entry['cancel_path'])), on_start=lambda pid,t=tid: starts.put((t,pid)))
+                    held.update(tasks[tid].get('resources', []))
                 bus.save(state, "tick")
                 human.export(root, plan, tasks, state, bus)
                 if not active and not coordinator_future:
@@ -988,6 +1049,9 @@ def run(root):
                                 if assessed['decision'] != 'approve':
                                     review.request_fixes(plan, state, bus, assessed)
                                     continue
+                            except providers.QuotaWait as exc:
+                                providers.pause(state, bus, exc.retry_at, task='integration')
+                                break
                             except review.BaselineFailure as exc:
                                 if repair_assurance(root, plan, tasks, state, bus, configs['worker'], exc.records, available()):
                                     continue
@@ -1037,6 +1101,8 @@ def run(root):
             rows = coverage.report(plan, state, lambda tid: human.review_valid(plan, tasks[tid], state, state["integration_head"]))
             if not all(r["status"] == "passed" for r in rows) and state["status"] == "completed":
                 state["status"] = "partial"
+            if state.get('quota_wait') and state['status'] != 'blocked_environment' and not cancel.exists():
+                state['status'] = 'waiting_for_quota'
             if remote_git.enabled(plan) and state['status'] == 'completed':
                 try:
                     remote_git.finish(plan, state, bus, available)

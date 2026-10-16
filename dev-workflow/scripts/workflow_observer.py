@@ -169,9 +169,11 @@ def log_window(root, artifact_id, secret=''):
 
 
 def advice(reason, status):
+    if status in ('quota_wait', 'waiting_for_quota', 'waiting_quota'):
+        return '已保存进度，监控脚本会在冷却结束后自动重试；无需人工继续。'
     lowered = reason.lower()
     for key, hint in (
-        ('quota', '检查模型账户额度，处理后再续跑；不要重复消耗尝试。'),
+        ('quota', '查看额度等待状态与下次重试时间；已启用恢复策略的运行会自动续跑。'),
         ('authentication', '检查服务器上 CLI 的登录状态，再执行真实环境探针。'),
         ('model_unavailable', '检查本次配置的模型是否可用，再执行真实环境探针。'),
         ('preflight', '先查看文件消息预检和进程记录，确认读写工具与回执。'),
@@ -314,7 +316,7 @@ def overview(service):
             snap = workflow.snapshot(root)
             plan = checks.read_json(root / 'plan.json')
             item['display'] = plan.get('display', {})
-            item.update(run_id=snap['run_id'], status=snap['phase'], counts=snap['task_counts'],
+            item.update(run_id=snap['run_id'], status=snap['phase'], counts=snap['task_counts'], quota_wait=snap.get('quota_wait'),
                         budget=snap['budget'], questions=len(snap['human_requests']))
         except (OSError, ValueError, KeyError, TypeError, checks.Rejected, sqlite3.Error) as exc:
             item.update(run_id=Path(row['root']).name, status='recovery_needed', error=str(exc))

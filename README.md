@@ -4,7 +4,7 @@
 
 A portable development workflow for **Codex and Claude Code**. Install one Skill, describe your goal, and let the agent align requirements, plan concrete tasks, implement, verify, and continue from the results.
 
-The Skill includes eight task-specific modules and an optional Python controller for resumable work, coordinated Git branches, and a live dependency graph. **Version: 2.16.1 — developer preview.**
+The Skill includes eight task-specific modules and an optional Python controller for resumable work, coordinated Git branches, and a live dependency graph. **Version: 2.17.0 — developer preview.**
 
 ## What it does
 
@@ -17,6 +17,7 @@ The Skill includes eight task-specific modules and an optional Python controller
 - [Functional partitioning](dev-workflow/references/task-partitioning.md) considers complexity, dependencies and recovery risk. Runtime sizing can ask the AI coordinator to split original behaviors into child PRs, while retaining full original acceptance and budgets. Atomic changes can stay together with evidence.
 - Records checkpoints, failure evidence, and candidate lessons. Only supported lessons become verified reusable knowledge.
 - Can run through an independent controller and an event-driven service, including waiting for a real human answer and resuming from it.
+- Optional [quota recovery](dev-workflow/references/provider-recovery.md): rotate among preconfigured providers, persist cooldowns when all are limited, and resume the same task and PR automatically. Verification, review, merge regression and original budgets still apply.
 
 ```mermaid
 flowchart LR

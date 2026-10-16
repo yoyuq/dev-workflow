@@ -2,6 +2,13 @@
 (function(root,factory){const api=factory();if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.WorkflowI18n=api;})(typeof window!=='undefined'?window:globalThis,()=>{
   'use strict';
   const english={
+  "等额度": "Waiting for quota",
+  "恢复任务": "Resuming task",
+  "等待额度恢复后自动续跑": "Resumes automatically after the provider cooldown",
+  "下次额度重试": "Next quota retry",
+  "waiting_for_quota": "Waiting for quota",
+  "quota_retry_due": "Quota retry due",
+  "quota_worker_resumed": "Preserved task resumed",
   "功能 PR": "Feature PR",
   "r{0} 新增 · 从 {1} 拆出的功能": "Added in r{0} · Feature split from {1}",
   "子功能已交付，原任务完整验收通过": "Child features delivered; full original acceptance passed",

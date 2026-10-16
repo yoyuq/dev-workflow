@@ -57,8 +57,9 @@ def snapshot(root, *, state=None):
                        "max_attempts_per_task": plan["limits"]["max_attempts"], "review_rounds_used": state.get("review_rounds", 0)},
             "human_requests": requests, "branch": state["integration_branch"], "head": state["integration_head"],
             "remote_git": coord.remote_git.summary(state), "remote_hold": state.get('remote_hold'),
+            "quota_wait": state.get('quota_wait'), "quota_wait_seconds": state.get('quota_wait_seconds', 0),
             "delivery_path": str(root / "delivery.json"), "cancelled": cancelled,
-            "next_action": "respond" if requests else ("observe_running" if live else "inspect_and_recover" if state.get("session_started") else "review_delivery" if state["status"] == "completed" else "run_or_inspect_blocker")}
+            "next_action": "respond" if requests else ("wait_for_quota_retry" if state.get('quota_wait') else "observe_running" if live else "inspect_and_recover" if state.get("session_started") else "review_delivery" if state["status"] == "completed" else "run_or_inspect_blocker")}
 
 
 def retry_review(root, tid):

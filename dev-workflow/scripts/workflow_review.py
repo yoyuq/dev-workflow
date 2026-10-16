@@ -6,6 +6,7 @@ import uuid
 import check_night_run as checks
 import workflow_memory as memory
 import workflow_runtime as runtime
+import workflow_providers as providers
 import workflow_human as human
 
 
@@ -241,7 +242,7 @@ def evaluate_once(root, plan, state, bus, config, head, task_id, remaining):
         return old
     original_count = sum(not t.get("support_for") for t in plan["tasks"])
     limit = plan.get("review", {}).get("max_rounds", 2 * (original_count + plan.get("replanning", {}).get("max_added_tasks", 0)) * plan["limits"]["max_attempts"])
-    checks.require(state.get("review_rounds", 0) < limit and remaining > 0, "review budget exhausted")
+    checks.require(state.get("review_rounds", 0) - state.get('review_quota_rounds', 0) < limit and remaining > 0, "review budget exhausted")
     environment = runtime.preflight(config, Path(plan["repository"]), remaining=remaining)
     if state.get("review_environment"):
         checks.require(environment["program_sha256"] == state["review_environment"]["program_sha256"], "reviewer executable drift")
@@ -280,6 +281,9 @@ def evaluate_once(root, plan, state, bus, config, head, task_id, remaining):
         failure = {'binding': expected, 'process': result, 'process_path': str(folder / 'process/process.json')}
         state.setdefault('review_process_failures', []).append(failure)
         bus.save(state, 'review_process_failed', task=task_id, binding=expected, reason=result['reason'], evidence=failure['process_path'])
+        if result.get('quota_retry_at') and providers.enabled(config):
+            state['review_quota_rounds'] = state.get('review_quota_rounds', 0) + 1
+            raise providers.QuotaWait(result['quota_retry_at'])
         retryable = (not result.get('environment_failure') and not result.get('permission_denials') and
                      result['reason'] in {'no_progress', 'time_limit', 'exited'})
         if retryable:
