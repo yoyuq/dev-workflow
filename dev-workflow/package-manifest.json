@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "name": "dev-workflow",
-  "version": "2.17.0",
+  "version": "2.17.1",
   "night_plan_format_version": 4,
   "snapshot_date": "2026-10-17",
   "files": {
@@ -151,7 +151,8 @@
     "scripts/test_dashboard_motion.cjs": "4a1266c481ea9dcb982ef129f2d0f41207040b54fa80a09330edd7b38a60ec00",
     "scripts/test_dashboard_titles.cjs": "467bdaa48f6c0c3499691f4cbe265a1c8ad5b88188370324a2f599fc88cd79ec",
     "scripts/test_plan_contract.py": "b9fc4de44d83f6af2b287ee70e82183087b066402e65767e4876fa0ec6e806ac",
-    "scripts/test_portable.py": "b7ecf68ba5d44addabf37eaee824910d7214b895440d548f970f474dfb1ce669",
+    "scripts/test_portable.py": "d9713d6d7163f6b37c37aaeb8761857e3b48c9235a29b8fb0d6a7e99fe7fbf3c",
+    "scripts/test_provider_preflight.py": "a094fc87184e97057dbd0ed37e8ebe5e6eed495ab3aa1046c873d15dc6ffb200",
     "scripts/test_provider_recovery.py": "d548d3942ec226f957b2245aec2097b6846cd41c2f61e49d586f30ed65840653",
     "scripts/test_recovered_sdk_stream.py": "3412348806e88ed3ccff8b223f94e2e1e14d94448b42f4ce842fe93fcd370110",
     "scripts/test_requirements_alignment.py": "28801fcf6caafed3496b510c0ec33023c63f0343fedb9a6dec16c40737e6c316",
@@ -201,12 +202,12 @@
     "scripts/workflow_replan.py": "33efe040f49df3acf668bdba9a9827ad3c354c8dd82b0ade0870467363fd8d11",
     "scripts/workflow_review.py": "6b06c906b16d9cdb442baa58ef2e569e1ce043d86290f50a9d9d122310e78371",
     "scripts/workflow_runner.py": "3698c7fc66ee7654520bba9baf95ff28dce8d6b9916f5305a5ea78beda3bf4e4",
-    "scripts/workflow_runtime.py": "3b61490fa9569deb1220ad8028e7cc4aecd5a3bb6afc89e607390382fd00af1e",
+    "scripts/workflow_runtime.py": "5dd740ba581fe191a1d8466adfa4d4b8b16cf6c5a1d0ffa9492d678088b730fb",
     "scripts/workflow_self_test.py": "50471422db79f479776f5e5484a7e56fb4a967dddfb2ff87ebea89609e1187dd",
     "scripts/workflow_service.py": "168a55b0700f5a90f1b4be04534f2bddcf87691f0e6933bfd258caab4e16b1fe",
     "scripts/workflow_session.py": "14623823c2289e2ef8bfdc41eda00f0bfe55594d8dfefc06e21ae91d06397a22",
     "scripts/workflow_titles.py": "b63416f2c94b8241e22a0faefbf944f6cb768ebafd05b5cd96127db06c9542a7",
-    "SKILL.md": "e129d680bb7a9752fcd199b281b25b595c111dc4ca8d8d43434e08116fb868ae",
+    "SKILL.md": "d1ef63bd9f8127e542a584ef0092331864fe5b2cb06a8a7b8ce7ee32706c12fb",
     "THIRD_PARTY.md": "0985fab06412bfdc95285eab5cdeecb20778ee276bb9f1cce592e82dd9efd53a"
   },
   "coordination_plan_format_version": 2

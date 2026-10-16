@@ -418,9 +418,25 @@ def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, ca
         # tools and time contract; never retry a generic code/auth/permission error.
         candidate['_provider_state'] = str(cooldowns.path)
         attempt_path = output / 'providers' / str(len(attempts) + 1)
+        environment = None
+        if ident != config['provider_id']:
+            try:
+                environment = preflight(candidate, repo, remaining=left)
+            except (checks.Rejected, OSError, ValueError) as exc:
+                attempt_path.mkdir(parents=True, exist_ok=False)
+                result = {'reason':'preflight_failed','exit_code':75,'harness_error':True,
+                          'environment_failure':'preflight','preflight_error':str(exc),
+                          'permission_denials':0,'provider_id':ident,'harness':candidate['harness']['kind']}
+                (attempt_path/'process.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf8')
+                attempts.append({'provider_id':ident,'artifact':str(attempt_path/'process.json'),'reason':'preflight_failed','environment_failure':'preflight'})
+                break
+            left = total - (time.monotonic() - started)
+            if left <= 0:
+                result = {'reason':'time_limit','exit_code':75,'harness_error':True,'permission_denials':0};break
         continued = prompt + ('\nA previous provider hit its account quota. Inspect and preserve existing partial changes within the same task/scope; complete the original fixed checks and mailbox protocol. Use new unique outbox message IDs.\n' if attempts else '')
         result = run_worker_once(candidate, repo, skill_root, continued, attempt_path, snapshot, left, cancel_path, on_start)
         result.update(provider_id=ident, harness=candidate['harness']['kind'])
+        if environment is not None: result['provider_preflight'] = environment
         (attempt_path/'process.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf8')
         attempts.append({'provider_id':ident,'artifact':str(attempt_path/'process.json'),'reason':result['reason'],
                          'environment_failure':result.get('environment_failure')})
