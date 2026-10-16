@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import queue
@@ -21,7 +22,9 @@ def now():
 
 
 def resolve_program(program):
-    found = str(Path(program).resolve()) if Path(program).is_absolute() else shutil.which(program)
+    # A venv's Python may be a symlink. Its invocation path selects pyvenv.cfg;
+    # dereferencing it launches the system environment even with identical bytes.
+    found = str(Path(program).absolute()) if Path(program).is_absolute() else shutil.which(program)
     checks.require(found and Path(found).is_file(), f"program unavailable: {program}")
     checks.require(Path(found).suffix.lower() not in {".cmd", ".bat", ".ps1"},
                    "use the native executable or an explicit interpreter, not a shell shim")
@@ -36,6 +39,17 @@ def validate_config(config):
     checks.require(isinstance(harness.get("args", []), list) and all(isinstance(a, str) for a in harness.get("args", [])), "harness.args must be argv strings")
     # Free-form argv is a trusted test/integration adapter, never generated from a model response.
     checks.require(harness["kind"] == "command" or not harness.get("args"), "native adapters use explicit fields, not arbitrary flags")
+    for field in ("max_budget_usd", "budget_reference_usd"):
+        if field in harness:
+            value = harness[field]
+            checks.require(type(value) in (int, float) and math.isfinite(value) and value > 0,
+                           "harness." + field + " must be a finite positive number")
+    if "budget_reference_usd" in harness:
+        checks.require(harness.get("max_budget_usd", 0) >= harness["budget_reference_usd"],
+                       "max_budget_usd is below the supplied measured budget reference")
+    for path in config.get("additional_directories", []):
+        checks.require(isinstance(path, str) and Path(path).is_absolute() and Path(path).is_dir(),
+                       "additional_directories must contain existing absolute directories")
     if harness.get("effort"):
         checks.require(harness["effort"] in {"low", "medium", "high"}, "unsupported effort")
     for field in ("attempt_seconds", "no_progress_seconds", "max_output_bytes"):
@@ -115,9 +129,28 @@ def command(config, repo, skill_root, readonly=False):
         argv.extend(["--model", harness["model"]])
     if harness.get("max_budget_usd"):
         argv.extend(["--max-budget-usd", str(harness["max_budget_usd"])])
+    for path in config.get("additional_directories", []):
+        argv.extend(["--add-dir", path])
     tools = ["Read", "Glob", "Grep", "Bash", "Skill"] + ([] if readonly else ["Write", "Edit"])
-    allowed = [t for t in tools if t != "Bash"] + harness.get("allowed_commands", ["Bash(python *)", "Bash(python3 *)", "Bash(git status*)", "Bash(git diff*)", "Bash(ls*)", "Bash(pwd*)", "Bash(cd *)", "Bash(echo *)"])
+    allowed = [t for t in tools if t != "Bash"] + allowed_commands(config)
     return [*argv, "--tools", ",".join(tools), "--allowedTools", *allowed]
+
+
+def allowed_commands(config):
+    return config["harness"].get("allowed_commands", ["Bash(python *)", "Bash(python3 *)",
+        "Bash(git status *)", "Bash(git diff *)", "Bash(ls *)", "Bash(pwd)", "Bash(echo *)"])
+
+
+def command_guidance(config, repo):
+    if config["harness"]["kind"] != "claude":
+        return ""
+    return ("\nController runtime: the process working directory is " + str(repo) +
+        ". Bash permission patterns are " + json.dumps(allowed_commands(config)) +
+        ". Use Read/Glob/Grep with absolute paths in authorized directories. "
+        "For Bash, use one single-line direct allowed command per call (no literal newlines even inside quoted arguments); do not prepend cd, environment assignments, "
+        "shell wrappers or pipelines. They require separate permissions. Use the supplied interpreter path "
+        "and Python's sys.path for project-local imports in supplementary probes. Never widen permissions "
+        "or retry a denied form; record a genuinely unavailable check.\n")
 
 
 def task_brief(plan, task, state, skill_root, memories=(), previous=None):
@@ -161,6 +194,8 @@ def normalize(event):
         result["reported_model"] = event.get("model")
     if event.get("type") == "result":
         result.update(reported_cost_usd=event.get("total_cost_usd"), harness_error=bool(event.get("is_error")))
+        if event.get("subtype") == "error_max_budget_usd":
+            result.update(harness_error=True, environment_failure="budget_exhausted", budget_exhausted=True)
     if event.get("type") in {"error", "turn.failed"}:
         result["harness_error"] = True
     if result.get("harness_error"):
@@ -242,6 +277,7 @@ def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, ca
                threading.Thread(target=reader, args=(process.stderr, "stderr"), daemon=True)]
     for thread in readers:
         thread.start()
+    prompt = command_guidance(config, repo) + prompt
     def send_prompt():
         try:
             process.stdin.write(prompt.encode("utf-8"))
