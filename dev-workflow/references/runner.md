@@ -19,6 +19,14 @@ python <WORKFLOW_ROOT>/scripts/workflow_runner.py status --run-dir <run-dir>
 
 路径示例是占位符，按宿主 shell 引号规则替换。init 只接受新的状态目录；不覆盖已有运行。Codex 使用 exec、JSON 事件、workspace-write、never approval、ephemeral；Claude 使用 print/stream-json、dontAsk、工具允许列表，不使用跳过权限开关。Windows 需要原生 exe；.cmd/.bat/.ps1 shim 不会被当作可执行文件直接调用。CLI 参数兼容性和登录必须在目标主机实际试跑。
 
+### Runtime regressions addressed in 2.16.1
+
+Executable lookup preserves a virtualenv interpreter's invocation path, including a Linux symlink. Test the exact controller check and preflight path; direct shell success alone is insufficient.
+
+Claude reviewers start in their evidence directory. The controller adds the exact isolated source worktree with `--add-dir` for source access and supplies the actual Bash patterns and cwd. Use file tools for source/embedded diffs. Save supplementary probe code under the evidence directory's `probes/`, then run a single-line allowed interpreter command. Avoid multiline `-c`, `cd &&`, shell environment prefixes and pipelines, which can require separate permissions. Preserve scripts as reproduction evidence. This does not grant unrestricted Bash or replace an OS sandbox. See [Claude permissions](https://code.claude.com/docs/en/permissions).
+
+Optional `harness.budget_reference_usd` records a measured comparable invocation cost; it requires a finite positive `max_budget_usd` at least that large. Choose explicit headroom per project/model; no universal dollar minimum or automatic budget increase is applied. Claude's `error_max_budget_usd` is recorded as `budget_exhausted` and stops recovery retries. A cap can be exceeded by the final call and SDK estimates do not establish the provider's invoice. Freeze a new run for any changed budget; preserve failed evidence.
+
 ## 每轮发生什么
 
 - 检查计划、技能、独立验收输入和 CLI 是否漂移；从依赖满足的任务中取一个。

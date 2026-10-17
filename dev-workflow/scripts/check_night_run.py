@@ -574,7 +574,8 @@ def run_check(task_id, check, repo, output, remaining):
     with log.open("wb") as stream:
         kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
         command = list(check["argv"])
-        command[0] = str(Path(command[0]).resolve()) if Path(command[0]).is_absolute() else shutil.which(command[0])
+        # Preserve the executable's invocation path (notably symlinked venv Python).
+        command[0] = str(Path(command[0]).absolute()) if Path(command[0]).is_absolute() else shutil.which(command[0])
         require(command[0] is not None, "verification executable disappeared")
         process = subprocess.Popen(command, cwd=repo / check["cwd"], stdin=subprocess.DEVNULL,
                                    stdout=stream, stderr=subprocess.STDOUT, shell=False, **kwargs)

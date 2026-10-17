@@ -14,7 +14,7 @@ MAX_BYTES = 65536
 MAX_ITEMS = 300
 PROCESS_KEYS = ('started_at', 'reason', 'exit_code', 'duration_seconds', 'environment_failure',
                 'permission_denials', 'harness_error', 'reported_model', 'first_artifact_seconds')
-EVENT_KEYS = ('task', 'attempt', 'reason', 'commit', 'head', 'status', 'round', 'case_id')
+EVENT_KEYS = ('task', 'attempt', 'reason', 'commit', 'head', 'status', 'round', 'case_id', 'pr', 'branch')
 
 
 def redact(value, secret=''):
@@ -169,9 +169,11 @@ def log_window(root, artifact_id, secret=''):
 
 
 def advice(reason, status):
+    if status in ('quota_wait', 'waiting_for_quota', 'waiting_quota'):
+        return '已保存进度，监控脚本会在冷却结束后自动重试；无需人工继续。'
     lowered = reason.lower()
     for key, hint in (
-        ('quota', '检查模型账户额度，处理后再续跑；不要重复消耗尝试。'),
+        ('quota', '查看额度等待状态与下次重试时间；已启用恢复策略的运行会自动续跑。'),
         ('authentication', '检查服务器上 CLI 的登录状态，再执行真实环境探针。'),
         ('model_unavailable', '检查本次配置的模型是否可用，再执行真实环境探针。'),
         ('preflight', '先查看文件消息预检和进程记录，确认读写工具与回执。'),
@@ -274,7 +276,10 @@ def detail(service, job_id):
             'requires': spec.get('requires', []), 'produces': spec.get('produces', []),
             'activity': activities[tid], 'introduced_revision': origins.get(tid, 0),
             'support_for': spec.get('support_for'),
+            'support_kind': spec.get('support_kind'), 'split_children': spec.get('split_children', []),
+            'completion_kind': entry.get('completion_kind'),
             'attempts': entry['attempts'], 'commit': entry.get('commit'), 'reason': entry.get('reason', ''),
+            'feature_prs': [{k: p.get(k) for k in ('number', 'url', 'phase', 'head', 'merge_head', 'rollback_head', 'attempt')} for p in entry.get('feature_prs', [])],
             'next_step': advice(entry.get('reason', ''), entry['status']), 'processes': attempts,
             'checks': [{k: c.get(k) for k in ('check_id', 'result', 'exit_code', 'duration_seconds', 'timed_out')}
                        for c in entry.get('last_checks', [])],
@@ -311,7 +316,7 @@ def overview(service):
             snap = workflow.snapshot(root)
             plan = checks.read_json(root / 'plan.json')
             item['display'] = plan.get('display', {})
-            item.update(run_id=snap['run_id'], status=snap['phase'], counts=snap['task_counts'],
+            item.update(run_id=snap['run_id'], status=snap['phase'], counts=snap['task_counts'], quota_wait=snap.get('quota_wait'),
                         budget=snap['budget'], questions=len(snap['human_requests']))
         except (OSError, ValueError, KeyError, TypeError, checks.Rejected, sqlite3.Error) as exc:
             item.update(run_id=Path(row['root']).name, status='recovery_needed', error=str(exc))

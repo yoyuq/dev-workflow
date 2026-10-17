@@ -43,7 +43,12 @@ def validate(plan, tasks):
             else:
                 raise checks.Rejected("acceptance.type must be automated or manual")
         checks.require(owners <= evidenced, "each requirement task needs its own acceptance evidence")
-    support = {tid for tid, t in tasks.items() if t.get("support_for") in covered and tid in tasks[t["support_for"]].get("depends_on", []) and not t.get("manual_review")}
+    support = set()
+    while True:
+        found = {tid for tid, t in tasks.items() if t.get('support_for') in covered | support and
+                 tid in tasks[t['support_for']].get('depends_on', []) and not t.get('manual_review')}
+        if found <= support: break
+        support |= found
     checks.require(covered | support == tasks.keys(), "tasks missing requirement coverage")
     checks.require(reviews == {(tid, i) for tid, task in tasks.items() for i in range(len(task.get("manual_review", [])))}, "manual reviews missing requirement coverage")
 

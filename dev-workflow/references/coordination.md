@@ -16,7 +16,7 @@ python <WORKFLOW_ROOT>/scripts/workflow.py run --run-dir <run-dir>
 python <WORKFLOW_ROOT>/scripts/workflow.py status --run-dir <run-dir>
 ```
 
-控制器目录应在源仓库和 Skill 目录之外。初始化创建本次运行专用的 integration 分支，各任务/尝试与候选合并使用独立 worktree。控制器不改变原 checkout 的 HEAD，不推送、不向主分支合并、不自动删除现场。初始化会在仓库 `info/exclude` 中排除 `.workflow-mailbox/`，避免消息进入提交。复制仓库用于演练时，不复制忽略的数据库、认证或硬件数据。
+控制器目录应在源仓库和 Skill 目录之外。初始化创建本次运行专用的 integration 分支，各任务/尝试与候选合并使用独立 worktree。默认交付本地分支与报告；用户要求并授权逐功能 GitHub PR 时使用 [feature_prs](feature-prs.md)，自动合并子 PR 到本次工作分支，回归通过再推进。原 checkout 的 HEAD 保持；项目基线分支只接收待审草稿 PR。初始化会在仓库 `info/exclude` 中排除 `.workflow-mailbox/`，避免消息进入提交。复制仓库用于演练时，不复制忽略的数据库、认证或硬件数据。
 
 ## 计划与依赖
 

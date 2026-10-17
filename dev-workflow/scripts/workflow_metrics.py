@@ -89,7 +89,12 @@ def collect(run_dir):
             raise ValueError('Linked telemetry directory refused')
         harness = configs.get(role, {}).get('harness', {}).get('kind', 'unknown')
         for path in sorted(base.rglob('events.jsonl')):
-            item = process_usage(path, harness, role)
+            try:
+                record = read_json(path.parent/'process.json') if (path.parent/'process.json').is_file() else {}
+                if not isinstance(record,dict): record = {}
+            except (OSError,ValueError): record = {}
+            item = process_usage(path, record.get('harness',harness), role)
+            item['provider_id'] = record.get('provider_id')
             item['artifact'] = path.relative_to(root).as_posix()
             processes.append(item)
     actual_model_logs = [p for p in processes if p['model_execution_configured']]
