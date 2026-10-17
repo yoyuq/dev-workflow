@@ -2,7 +2,7 @@
 name: dev-workflow
 description: 实现或续接开发任务：用内置 grill-me 按项目复杂度对齐需求，拆成可验收任务并持续实施；支持当前会话、夜间准备、多分支协作和进度续接。不用于纯咨询、单独审查或编辑技能本身。
 metadata:
-  version: "2.17.1"
+  version: "2.17.2"
   compatibility: Codex and Claude Code with file and command tools; Python 3.10+ for the optional controller.
 ---
 

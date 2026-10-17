@@ -1,5 +1,6 @@
 """Fresh-context task and whole-branch review, bound to Git and contract evidence."""
 from pathlib import Path
+import json
 import time
 import uuid
 
@@ -164,6 +165,14 @@ If learning_proposals contain diagnoses, independently assess root cause and pre
         # Small inputs arrive in one turn, without command output truncation.
         # Large reviews keep the same files and read them selectively instead.
         info = checks.read_json(brief_path)
+        # Native reviewers may copy the displayed schema verbatim. Supply its
+        # real binding even when a large briefing remains on disk; never repair
+        # or replace an incorrect binding after the report is submitted.
+        prompt = prompt.replace('{"binding":{},', '{"binding":' +
+                                json.dumps(info['binding'], ensure_ascii=False, separators=(',', ':')) + ',', 1)
+        prompt += ("\nThe schema above contains this review's exact controller-supplied binding. "
+                   "Preserve every field, including contracts and revision; an empty binding is invalid. "
+                   "Before finishing, compare report.json binding with brief.json binding.\n")
         is_repair = info["focus"]["mode"] == "repair"
         # Small repairs commonly need prior validation plus both diffs. Supply the
         # complete index once rather than making the reviewer fetch duplicates.
