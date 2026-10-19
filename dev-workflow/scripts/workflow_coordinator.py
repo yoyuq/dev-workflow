@@ -618,7 +618,10 @@ def recover(root):
         checks.require(not serial.process_alive(checks.read_json(lock)["pid"]), "controller may still be running")
     for pid in [state.get("coordinator_pid"), *[s.get("pid") for s in state["tasks"].values()], *[p["pid"] for p in bus.live_candidates()]]:
         checks.require(not pid or not serial.process_alive(pid), "a recorded worker may still be running")
-    quota_boundary = state.get('quota_wait', {}).get('since') if state.get('coordinator_quota_pause') else None
+    quota_paused = state.get('coordinator_quota_pause') or (
+        state['status'] == 'waiting_for_quota' and not state.get('coordinator_active') and
+        not any(entry['status'] in {'creating', 'running', 'committing'} for entry in state['tasks'].values()))
+    quota_boundary = state.get('quota_wait', {}).get('since') if quota_paused else None
     if state["session_started"]:
         ended = min(time.time(), quota_boundary) if quota_boundary is not None else time.time()
         state["elapsed_seconds"] += max(0, ended - state["session_started"])

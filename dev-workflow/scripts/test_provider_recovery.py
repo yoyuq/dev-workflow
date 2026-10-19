@@ -260,6 +260,33 @@ class ProviderRecovery(unittest.TestCase):
                 self.assertEqual(entry['quota_recovery_timing']['source'], 'process' if recorded else 'quota_pause_boundary')
                 self.assertEqual(recovered['elapsed_seconds'], 12)
 
+    def test_recover_ordinary_quota_excludes_offline_wait_only_after_the_wave_pauses(self):
+        cases = [('quota_wait', None, False), ('verified', None, False),
+            ('quota_wait', 'creating', False), ('quota_wait', 'running', False),
+            ('quota_wait', 'committing', False), ('quota_wait', None, True)]
+        for index, (status, peer_status, coordinator_active) in enumerate(cases):
+            with self.subTest(task=status, peer=peer_status, coordinator_active=coordinator_active):
+                base = self.base / str(index)
+                base.mkdir()
+                plan, root = fixture(base, count=2 if peer_status else 1)
+                state = Bus(root).state()
+                state.update(status='waiting_for_quota', session_started=100, elapsed_seconds=2,
+                    coordinator_active=coordinator_active, quota_wait={'since':110, 'retry_at':111, 'task':'A'})
+                state['tasks']['A'].update(status=status, attempts=1)
+                if peer_status:
+                    branch = 'workflow/recovery/B-a1'
+                    workspace = coord.new_worktree(root, plan, branch, plan['base_commit'], 'B-a1')
+                    state['tasks']['B'].update(status=peer_status, attempts=1, workspace=str(workspace),
+                        branch=branch, launch_base=plan['base_commit'], baseline=coord.source_snapshot(workspace, plan['tasks']))
+                Bus(root).save(state, 'test_crash_during_ordinary_quota_wait')
+                with patch.object(coord.time, 'time', return_value=10000):
+                    coord.recover(root)
+                recovered = Bus(root).state()
+                self.assertEqual(recovered['elapsed_seconds'], 9902 if peer_status or coordinator_active else 12)
+                self.assertEqual(recovered['tasks']['A']['status'], status)
+                self.assertEqual(recovered['tasks']['A']['attempts'], 1)
+                self.assertEqual(recovered['quota_wait'], state['quota_wait'])
+
     def test_cancel_during_cooldown_prevents_automatic_resume(self):
         root,controller,ready=self.prepare();controller.dispatch_once()
         controller.submit({'id':'cancel','run_dir':str(root),'cancel':True})
