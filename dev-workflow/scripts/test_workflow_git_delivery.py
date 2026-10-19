@@ -161,6 +161,60 @@ class FeaturePRTests(unittest.TestCase):
         self.assertEqual(len(self.state()['remote_git']['rollbacks']),1)
         self.assertEqual(self.state()['remote_git']['rollbacks'][0]['restored'],target)
 
+    def test_interrupted_local_acceptance_can_revert_its_recorded_merge_on_resume(self):
+        check=Path(self.plan['remote_git']['post_merge_checks'][0]['argv'][2])
+        check.write_text("from pathlib import Path\nimport sys\nr=Path(sys.argv[1]);marker=Path(sys.argv[2])\nassert (r/'base.txt').read_text()=='baseline'\nif r.name.startswith('parent-check-'):\n count=int(marker.read_text()) if marker.exists() else 0\n marker.write_text(str(count+1))\n if count==1:raise AssertionError('fresh resumed regression failed')\n",encoding='utf-8')
+        self.initialize()
+        original_save=delivery.save
+        def interrupt_after_local_ref(bus,state,event,**data):
+            original_save(bus,state,event,**data)
+            if event=='parent_regression_passed' and data['task']=='A':
+                raise KeyboardInterrupt('crash after local ref, before acceptance')
+        with patch.object(delivery,'save',side_effect=interrupt_after_local_ref):
+            with self.assertRaises(KeyboardInterrupt):coord.run(self.root)
+        state=self.state();merged=state['integration_intent']['merged']
+        self.assertEqual(coord.git(Path(self.plan['repository']),'rev-parse',state['integration_branch']),merged)
+        coord.recover(self.root);(self.root/'cancel.request').unlink()
+        self.assertEqual(coord.run(self.root),0)
+        state=self.state()
+        self.assertEqual(len(state['remote_git']['rollbacks']),1)
+        self.assertEqual(state['remote_git']['rollbacks'][0]['merged'],merged)
+        self.assertEqual(state['tasks']['A']['attempts'],2)
+
+    def test_revert_does_not_replace_unknown_local_work_head(self):
+        self.initialize();original_save=delivery.save;unknown=[]
+        def change_local_ref(bus,state,event,**data):
+            original_save(bus,state,event,**data)
+            if event=='parent_regression_failed':
+                unknown.append(state['tasks'][data['task']]['commit'])
+                coord.git(Path(self.plan['repository']),'update-ref','refs/heads/'+state['integration_branch'],unknown[-1])
+        with patch.object(delivery,'save',side_effect=change_local_ref):
+            self.assertEqual(coord.run(self.root),3)
+        state=self.state()
+        self.assertIn('local work branch changed',state['remote_hold'])
+        self.assertEqual(coord.git(Path(self.plan['repository']),'rev-parse',state['integration_branch']),unknown[-1])
+        self.assertTrue(state['integration_intent'])
+        self.assertEqual(state['tasks']['B']['attempts'],0)
+
+    def test_removed_post_merge_check_cwd_reverts_and_repairs(self):
+        self.marker.write_text('disable planned fault')
+        repo=Path(self.plan['repository']);(repo/'needed').mkdir();(repo/'needed/keep.txt').write_text('baseline')
+        coord.git(repo,'add','needed/keep.txt');coord.git(repo,'commit','-m','fixed regression cwd')
+        self.plan['base_commit']=coord.git(repo,'rev-parse','HEAD')
+        coord.git(repo,'push',str(self.api.remote),'main:main')
+        self.plan['tasks'][0]['allowed_scope'].append('needed')
+        self.plan['remote_git']['post_merge_checks'][0]['cwd']='needed'
+        worker=self.base/'worker.py'
+        worker.write_text(worker.read_text(encoding='utf-8').replace("    if tid == 'B':", "    if tid == 'A' and [m for m in box['messages'] if m['kind']=='assignment'][-1]['payload']['attempt']==1:\n        Path('needed/keep.txt').unlink();Path('needed').rmdir()\n    if tid == 'B':"),encoding='utf-8')
+        self.initialize();self.assertEqual(coord.run(self.root),0);state=self.state()
+        self.assertEqual(state['tasks']['A']['attempts'],2)
+        self.assertEqual(len(state['remote_git']['rollbacks']),1)
+        failure=state['tasks']['A']['feature_prs'][0]['phase']
+        self.assertEqual(failure,'reverted')
+        checks_after_revert=state['remote_git']['rollbacks'][0]['checks']
+        self.assertTrue(all(c['result']=='passed' for c in checks_after_revert))
+        self.assertEqual(self.api.ref('main'),self.plan['base_commit'])
+
     def test_failed_ci_during_resume_repairs_under_original_attempt_budget(self):
         self.marker.write_text('disable planned fault');self.api.crash_before_merge=True;self.initialize()
         with self.assertRaises(KeyboardInterrupt):coord.run(self.root)

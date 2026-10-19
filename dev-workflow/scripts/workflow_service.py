@@ -187,8 +187,16 @@ class Service:
                 with Bus(root).connection() as run_db:
                     pending = run_db.execute("SELECT COUNT(*) FROM human_responses WHERE status='queued'").fetchone()[0]
                 status = "cancelled" if snapshot["cancelled"] else "queued" if pending else "completed" if snapshot["status"] == "completed" else "waiting" if snapshot["human_requests"] else "failed"
-                if status == 'failed' and snapshot['status'] == 'waiting_for_quota' and snapshot.get('quota_wait'):
-                    status, retry_at = 'waiting_quota', snapshot['quota_wait']['retry_at']
+                if status in {'failed', 'waiting'} and snapshot['status'] == 'waiting_for_quota' and snapshot.get('quota_wait'):
+                    state = Bus(root).state()
+                    plan, _, configs = coord.load(root, state=state)
+                    automatic = (configs.get('coordinator') and state['coordinator_rounds'] - state.get('coordinator_quota_rounds', 0) <
+                                 plan['limits']['max_coordinator_rounds'])
+                    human_wait = any(ticket['context']['kind'] != 'answer' or not automatic or
+                                     state['tasks'][ticket['context']['task_id']].get('needs_human')
+                                     for ticket in snapshot['human_requests'])
+                    if not human_wait:
+                        status, retry_at = 'waiting_quota', snapshot['quota_wait']['retry_at']
                 detail = encoded(snapshot)
             except (checks.Rejected, OSError, ValueError, KeyError) as exc: detail = str(exc)
             db.execute("UPDATE jobs SET status=?,pid=NULL,updated=?,detail=?,retry_at=? WHERE id=?", (status, time.time(), detail, retry_at, jid))

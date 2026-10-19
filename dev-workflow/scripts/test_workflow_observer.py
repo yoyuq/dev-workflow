@@ -191,6 +191,55 @@ class ObserverTests(unittest.TestCase):
         for fragment in ('NIGHT', 'SHIFT', 'PASSWORD 42', 'SIMULATED', 'CANARY', 'SPACES'):
             self.assertNotIn(fragment, text)
 
+    def test_fine_grained_and_environment_credentials_are_fully_redacted(self):
+        token = 'github_pat_' + 'A' * 22 + '_' + 'B' * 59
+        samples = [token, 'GITHUB_TOKEN="SIMULATED GH CREDENTIAL WITH SPACES"',
+                   'GH_TOKEN=SIMULATED_GH_CANARY', 'refresh_token=SIMULATED_REFRESH_CANARY']
+        (self.attempt()/'stderr.log').write_text('\n'.join(samples) + '\nordinary diagnostic', encoding='utf8')
+        artifact = next(a for a in observer.catalog(self.run) if a['kind'] == 'text')
+        text = observer.log_window(self.run, artifact['id'])['text']
+        for secret in [token, 'SIMULATED', 'CANARY', 'CREDENTIAL WITH SPACES']:
+            self.assertNotIn(secret, text)
+        self.assertIn('ordinary diagnostic', text)
+        structured = observer.redact({'GITHUB_TOKEN': 'CANARY', 'gh_token': 'CANARY',
+                                      'refresh_token': 'CANARY', 'input_tokens': 123})
+        self.assertNotIn('CANARY', json.dumps(structured))
+        self.assertEqual(structured['input_tokens'], 123)
+
+    def test_provider_and_quota_resumption_logs_are_visible(self):
+        root = self.attempt()
+        folders = [root/'providers/1', root/'quota-resumes/1',
+                   root/'quota-resumes/1/providers/2', self.run/'reviews/native/process/providers/1',
+                   self.run/'decisions/1/process/providers/1']
+        expected = set()
+        for folder in folders:
+            folder.mkdir(parents=True)
+            memory.atomic_json(folder/'process.json', {'provider_id':'spare', 'reason':'exited',
+                'exit_code':0, 'duration_seconds':1})
+            (folder/'events.jsonl').write_text(json.dumps({'type':'turn.completed'}))
+            (folder/'stderr.log').write_text('provider diagnostic')
+            expected.update((folder/name).relative_to(self.run).as_posix()
+                            for name in ['process.json','events.jsonl','stderr.log'])
+        artifacts = observer.catalog(self.run)
+        self.assertTrue(expected <= {item['path'] for item in artifacts})
+        for item in artifacts:
+            result = observer.log_window(self.run, item['id'])
+            if item['kind'] == 'events': self.assertEqual(result['text'], 'turn.completed')
+            elif item['kind'] == 'text': self.assertEqual(result['text'], 'provider diagnostic')
+            else: self.assertEqual(json.loads(result['text'])['provider_id'], 'spare')
+
+    def test_nested_provider_directory_links_are_not_exposed(self):
+        root = self.attempt()
+        outside = self.base/'outside-provider'
+        outside.mkdir()
+        (outside/'stderr.log').write_text('OUTSIDE_CANARY')
+        (root/'providers').mkdir()
+        try:
+            (root/'providers/1').symlink_to(outside, target_is_directory=True)
+        except OSError:
+            self.skipTest('Host cannot create directory symlinks')
+        self.assertFalse(observer.catalog(self.run))
+
     def test_malformed_optional_evidence_does_not_hide_valid_records(self):
         folder = self.run/'checks/task-A-1'; folder.mkdir(parents=True)
         (folder/'check-abc.log').write_text('valid check output')

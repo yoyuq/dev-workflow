@@ -13,13 +13,15 @@ from workflow_bus import Bus
 MAX_BYTES = 65536
 MAX_ITEMS = 300
 PROCESS_KEYS = ('started_at', 'reason', 'exit_code', 'duration_seconds', 'environment_failure',
-                'permission_denials', 'harness_error', 'reported_model', 'first_artifact_seconds')
+                'permission_denials', 'harness_error', 'reported_model', 'first_artifact_seconds',
+                'provider_id', 'quota_retry_at', 'retry_after_seconds')
 EVENT_KEYS = ('task', 'attempt', 'reason', 'commit', 'head', 'status', 'round', 'case_id', 'pr', 'branch')
+SECRET_KEY = r'(?:authorization|api[_-]?key|(?:access|refresh)[_-]?token|(?:gh|github)[_-]token|password|secret)'
 
 
 def redact(value, secret=''):
     if isinstance(value, dict):
-        return {k: '[REDACTED]' if re.fullmatch(r'(?i)(authorization|api[_-]?key|access[_-]?token|password|secret)', k) else redact(v, secret) for k, v in value.items()}
+        return {k: '[REDACTED]' if re.fullmatch(SECRET_KEY, k, re.I) else redact(v, secret) for k, v in value.items()}
     if isinstance(value, list):
         return [redact(v, secret) for v in value]
     if not isinstance(value, str):
@@ -28,9 +30,9 @@ def redact(value, secret=''):
     value = re.sub(r'(?i)(bearer\s+)[^\s"\',;]+', r'\1[REDACTED]', value)
     # Consume a complete quoted value (including spaces and escaped quotes) before
     # the unquoted alternative. Covers shell assignments, JSON and Python reprs.
-    value = re.sub(r'''(?ix)(\b(?:api[_-]?key|access[_-]?token|password|secret|authorization)["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s"',;]+)''',
+    value = re.sub(r'''(?ix)(\b''' + SECRET_KEY + r'''["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s"',;]+)''',
                    r'\1[REDACTED]', value)
-    value = re.sub(r'\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9]{15,})\b', '[REDACTED]', value)
+    value = re.sub(r'\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9]{15,}|github_pat_[A-Za-z0-9_]{20,})\b', '[REDACTED]', value)
     return value
 
 
@@ -75,11 +77,29 @@ def catalog(root):
                           'bytes': path.stat().st_size})
         except (OSError, ValueError, checks.Rejected):
             return
-    def process(folder, label, task='', attempt=None, english=None):
+    def process_files(folder, label, task='', attempt=None, english=None, primary=True):
         en = english or label
+        before = len(items)
         add(folder / 'process.json', label + ' · 进程结果', 'process', task, attempt, en + ' · Process result')
+        if len(items) > before and not primary: items[-1]['process_scope'] = 'provider_or_resumption'
         add(folder / 'stderr.log', label + ' · 错误输出', 'text', task, attempt, en + ' · Error output')
         add(folder / 'events.jsonl', label + ' · 执行事件', 'events', task, attempt, en + ' · Execution events')
+    def provider_files(folder, label, task, attempt, english):
+        for provider in children(root, folder / 'providers'):
+            if len(items) >= MAX_ITEMS: break
+            if provider.name.isdigit():
+                process_files(provider, label + ' / 入口 ' + provider.name, task, attempt,
+                              english + ' / Provider ' + provider.name, primary=False)
+    def process(folder, label, task='', attempt=None, english=None):
+        en = english or label
+        process_files(folder, label, task, attempt, en)
+        provider_files(folder, label, task, attempt, en)
+        for resume in children(root, folder / 'quota-resumes'):
+            if len(items) >= MAX_ITEMS: break
+            if resume.name.isdigit():
+                resume_label, resume_en = label + ' / 额度续跑 ' + resume.name, en + ' / Quota resume ' + resume.name
+                process_files(resume, resume_label, task, attempt, resume_en, primary=False)
+                provider_files(resume, resume_label, task, attempt, resume_en)
     for task in children(root, root / 'attempts'):
         for attempt in children(root, task):
             if attempt.name.isdigit():
@@ -265,7 +285,8 @@ def detail(service, job_id):
         spec = definitions.get(tid, {})
         attempts = []
         for artifact in artifacts:
-            if artifact['task_id'] == tid and artifact['kind'] == 'process' and artifact['attempt'] is not None:
+            if (artifact['task_id'] == tid and artifact['kind'] == 'process' and artifact['attempt'] is not None
+                    and not artifact.get('process_scope')):
                 try:
                     raw = read_json(root, root / artifact['path'])
                     if not isinstance(raw, dict): continue

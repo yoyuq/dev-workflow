@@ -5,6 +5,7 @@ from unittest.mock import patch
 import check_night_run as checks
 import workflow
 import workflow_coordinator as coord
+import workflow_human as human
 import workflow_memory as memory
 import workflow_metrics as metrics
 import workflow_providers as providers
@@ -102,6 +103,162 @@ class ProviderRecovery(unittest.TestCase):
         self.assertEqual(state['tasks']['A']['reason'],'authentication')
         self.assertEqual(len(list((root/'attempts').rglob('events.jsonl'))),1)
         self.assertFalse(controller.dispatch_once())
+
+    def prepare_coordinator(self, *, auth=False):
+        plan, old = fixture(self.base, 'coordinator_question')
+        plan['run_id'] = 'coordinator-quota-case'
+        plan['skill_root'] = str(coord.ROOT)
+        plan['limits'].update(max_attempts=1, max_coordinator_rounds=2 if auth else 1, parallelism=1)
+        worker = self.base / 'worker.py'
+        worker_code = WORKER.replace('time.monotonic() + 15', 'time.monotonic() + 3')
+        worker_code = worker_code.replace("    msg.post('.', 'question', text='Confirm required output from the fixed task goal')",
+            "    old = [json.loads(p.read_text()) for p in Path('.workflow-mailbox/outbox').glob('*.json')]\n"
+            "    if not any(m.get('type') == 'question' for m in old):\n"
+            "        msg.post('.', 'question', text='Confirm required output from the fixed task goal')\n"
+            "        Path('a.txt').write_text('Question sent; preserve across provider pause')")
+        worker.write_text(worker_code, encoding='utf8')
+        configs = checks.read_json(old / 'runtime.json')
+        ready = self.base / 'coordinator-ready.flag'
+        script = self.base / 'coordinator-provider.py'
+        script.write_text(GATE + WORKER, encoding='utf8')
+        config = configs['coordinator']
+        config['harness']['args'] = ['-B', str(script), str(HERE), 'coordinator', 'auth' if auth else 'single', str(ready)]
+        config.update(provider_id='coordinator', quota_recovery={'enabled':True, 'initial_seconds':1, 'max_seconds':1})
+        config['protected_files'].append(str(script))
+        memory.atomic_json(self.base / 'new-plan.json', plan)
+        memory.atomic_json(self.base / 'new-runtime.json', configs)
+        root = self.base / 'runs' / 'coordinator-quota'
+        coord.initialize(self.base / 'new-plan.json', self.base / 'new-runtime.json', root)
+        service.initialize(self.base / 'control', self.base / 'runs')
+        controller = service.Service(self.base / 'control')
+        controller.submit({'id':'start', 'run_dir':str(root)})
+        return root, controller, ready
+
+    def test_coordinator_quota_pauses_waiting_worker_and_service_resumes_same_attempt(self):
+        root, controller, ready = self.prepare_coordinator()
+        self.assertTrue(controller.dispatch_once())
+        state = Bus(root).state()
+        entry = state['tasks']['A']
+        workspace, spent = entry['workspace'], entry['quota_attempt_elapsed_seconds']
+        self.assertEqual(state['status'], 'waiting_for_quota')
+        self.assertEqual(entry['status'], 'quota_wait')
+        self.assertEqual(entry['attempts'], 1)
+        self.assertLess(spent, 3, 'Worker must pause before its simulated answer deadline')
+        self.assertTrue(workflow.snapshot(root)['human_requests'])
+        original_question = next(m for m in Bus(root).unresolved() if m['kind'] == 'question')
+        self.assertEqual(controller.listing()[0]['status'], 'waiting_quota')
+        ready.touch()
+        time.sleep(1.1)
+        fresh = service.Service(self.base / 'control')
+        fresh.recover_jobs()
+        self.assertTrue(fresh.dispatch_once())
+        final = Bus(root).state()
+        self.assertEqual(final['status'], 'completed')
+        self.assertEqual(final['tasks']['A']['workspace'], workspace)
+        self.assertEqual(final['tasks']['A']['attempts'], 1)
+        self.assertGreater(final['tasks']['A']['quota_attempt_elapsed_seconds'], spent)
+        self.assertEqual(final['coordinator_rounds'] - final['coordinator_quota_rounds'], 1)
+        questions = [m for m in Bus(root).messages() if m['kind'] == 'question']
+        self.assertEqual([m['id'] for m in questions], [original_question['id']])
+        self.assertTrue(questions[0]['resolved'])
+        decisions = [m for m in Bus(root).messages() if m['kind'] == 'decision']
+        self.assertEqual(decisions[0]['payload']['request_id'], original_question['id'])
+        self.assertTrue(decisions[0]['acked'])
+        self.assertFalse(fresh.dispatch_once())
+
+    def test_explicit_human_decision_still_prevents_automatic_quota_resume(self):
+        root, controller, ready = self.prepare_coordinator()
+        controller.dispatch_once()
+        state = Bus(root).state()
+        state['tasks']['A']['needs_human'] = 'User must decide the output'
+        Bus(root).save(state, 'test_explicit_human_decision')
+        row = controller.listing()[0]
+        controller.finish(row['id'], row['generation'], 3)
+        self.assertEqual(controller.listing()[0]['status'], 'waiting')
+        ready.touch()
+        time.sleep(1.1)
+        self.assertFalse(controller.dispatch_once())
+
+    def test_coordinator_authentication_failure_is_not_retried_as_another_round(self):
+        root, controller, ready = self.prepare_coordinator(auth=True)
+        controller.dispatch_once()
+        state = Bus(root).state()
+        self.assertEqual(state['status'], 'blocked_environment')
+        self.assertEqual(state['coordinator_environment_failure'], 'authentication')
+        self.assertEqual(state['coordinator_rounds'], 1)
+        self.assertEqual(len(list((root / 'decisions').glob('*/process/process.json'))), 1)
+        self.assertFalse(controller.dispatch_once())
+
+    def test_human_response_during_cooldown_retains_timer_without_an_early_model_call(self):
+        root, controller, _ = self.prepare_coordinator()
+        controller.dispatch_once()
+        state = Bus(root).state()
+        retry_at = time.time() + 60
+        state['quota_wait']['retry_at'] = retry_at
+        state['tasks']['A']['needs_human'] = 'Human must decide this output'
+        Bus(root).save(state, 'test_explicit_human_decision_during_quota')
+        row = controller.listing()[0]
+        controller.finish(row['id'], row['generation'], 3)
+        self.assertEqual(controller.listing()[0]['status'], 'waiting')
+        ticket = workflow.snapshot(root)['human_requests'][0]
+        response = {'id':'quota-answer', 'ticket_id':ticket['ticket_id'], 'decision':'answer',
+            'text':'confirmed: OK', 'reference':'isolated regression', 'quote':'Confirm required output'}
+        controller.submit({'id':'answer-event', 'run_dir':str(root), 'response':response})
+        self.assertTrue(controller.dispatch_once())
+        final = Bus(root).state()
+        self.assertEqual(final['status'], 'waiting_for_quota')
+        self.assertEqual(final['quota_wait']['retry_at'], retry_at)
+        self.assertNotIn('needs_human', final['tasks']['A'])
+        self.assertEqual(final['tasks']['A']['attempts'], 1)
+        self.assertEqual(human.receipt(root, response['id'])['status'], 'applied')
+        self.assertFalse(Bus(root).unresolved())
+        self.assertEqual(len(list((root / 'decisions').glob('*/process/process.json'))), 1)
+        self.assertEqual(controller.listing()[0]['status'], 'waiting_quota')
+        self.assertEqual(controller.listing()[0]['retry_at'], retry_at)
+        self.assertFalse(controller.dispatch_once())
+
+    def test_cancel_during_coordinator_quota_prevents_resume(self):
+        root, controller, ready = self.prepare_coordinator()
+        controller.dispatch_once()
+        controller.submit({'id':'cancel', 'run_dir':str(root), 'cancel':True})
+        ready.touch()
+        time.sleep(1.1)
+        self.assertFalse(controller.dispatch_once())
+        self.assertEqual(controller.listing()[0]['status'], 'cancelled')
+        self.assertEqual(Bus(root).state()['tasks']['A']['attempts'], 1)
+
+    def test_recover_coordinator_quota_uses_process_time_or_pause_boundary_not_offline_wait(self):
+        original = self.base
+        for recorded in (False, True):
+            with self.subTest(process_duration=recorded):
+                self.base = original / ('recorded' if recorded else 'missing')
+                self.base.mkdir()
+                root, _, _ = self.prepare_coordinator()
+                plan, _, _ = coord.load(root)
+                workspace = coord.new_worktree(root, plan, 'workflow/recovery/A-a1', plan['base_commit'], 'A-a1')
+                baseline = coord.source_snapshot(workspace, plan['tasks'])
+                (workspace / 'a.txt').write_text('Preserved draft')
+                state = Bus(root).state()
+                state.update(status='waiting_for_quota', session_started=100, elapsed_seconds=2,
+                    coordinator_quota_pause=True, quota_wait={'since':110, 'retry_at':111, 'task':'coordinator'})
+                state['tasks']['A'].update(status='running', attempts=1, workspace=str(workspace),
+                    branch='workflow/recovery/A-a1', baseline=baseline, worker_preflight={'started_at':100},
+                    quota_attempt_elapsed_seconds=3, quota_resumptions=1)
+                if recorded:
+                    process_folder = root / 'attempts/A/1/quota-resumes/1'
+                    process_folder.mkdir(parents=True)
+                    memory.atomic_json(process_folder / 'process.json', {'duration_seconds':4})
+                Bus(root).save(state, 'test_crash_after_quota_pause')
+                with patch.object(coord.time, 'time', return_value=10000):
+                    coord.recover(root)
+                recovered = Bus(root).state()
+                entry = recovered['tasks']['A']
+                self.assertEqual(entry['status'], 'quota_wait')
+                self.assertEqual(entry['workspace'], str(workspace))
+                self.assertEqual(entry['attempts'], 1)
+                self.assertEqual(entry['quota_attempt_elapsed_seconds'], 7 if recorded else 13)
+                self.assertEqual(entry['quota_recovery_timing']['source'], 'process' if recorded else 'quota_pause_boundary')
+                self.assertEqual(recovered['elapsed_seconds'], 12)
 
     def test_cancel_during_cooldown_prevents_automatic_resume(self):
         root,controller,ready=self.prepare();controller.dispatch_once()
