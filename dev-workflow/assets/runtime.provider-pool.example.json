@@ -1,0 +1,10 @@
+{
+  "format_version": 1,
+  "harness": {"kind": "claude", "executable": "/srv/dev-workflow/bin/claude-primary", "model": "doubao-seed-2.1-turbo"},
+  "provider_id": "primary",
+  "quota_recovery": {"enabled": true, "initial_seconds": 60, "max_seconds": 900},
+  "fallbacks": [{"id": "backup", "harness": {"kind": "claude", "executable": "/srv/dev-workflow/bin/claude-backup", "model": "minimax-m3"}, "protected_files": ["/srv/dev-workflow/profiles/backup/settings.json"]}],
+  "limits": {"attempt_seconds": 600, "no_progress_seconds": 180, "max_output_bytes": 3000000},
+  "protected_files": ["/srv/dev-workflow/profiles/primary/settings.json"],
+  "preflight_checks": []
+}

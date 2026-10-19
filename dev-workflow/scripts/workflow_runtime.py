@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import queue
@@ -14,6 +15,7 @@ import time
 
 import check_night_run as checks
 import workflow_locale as locale
+import workflow_providers as providers
 
 
 def now():
@@ -21,7 +23,9 @@ def now():
 
 
 def resolve_program(program):
-    found = str(Path(program).resolve()) if Path(program).is_absolute() else shutil.which(program)
+    # A venv's Python may be a symlink. Its invocation path selects pyvenv.cfg;
+    # dereferencing it launches the system environment even with identical bytes.
+    found = str(Path(program).absolute()) if Path(program).is_absolute() else shutil.which(program)
     checks.require(found and Path(found).is_file(), f"program unavailable: {program}")
     checks.require(Path(found).suffix.lower() not in {".cmd", ".bat", ".ps1"},
                    "use the native executable or an explicit interpreter, not a shell shim")
@@ -36,6 +40,17 @@ def validate_config(config):
     checks.require(isinstance(harness.get("args", []), list) and all(isinstance(a, str) for a in harness.get("args", [])), "harness.args must be argv strings")
     # Free-form argv is a trusted test/integration adapter, never generated from a model response.
     checks.require(harness["kind"] == "command" or not harness.get("args"), "native adapters use explicit fields, not arbitrary flags")
+    for field in ("max_budget_usd", "budget_reference_usd"):
+        if field in harness:
+            value = harness[field]
+            checks.require(type(value) in (int, float) and math.isfinite(value) and value > 0,
+                           "harness." + field + " must be a finite positive number")
+    if "budget_reference_usd" in harness:
+        checks.require(harness.get("max_budget_usd", 0) >= harness["budget_reference_usd"],
+                       "max_budget_usd is below the supplied measured budget reference")
+    for path in config.get("additional_directories", []):
+        checks.require(isinstance(path, str) and Path(path).is_absolute() and Path(path).is_dir(),
+                       "additional_directories must contain existing absolute directories")
     if harness.get("effort"):
         checks.require(harness["effort"] in {"low", "medium", "high"}, "unsupported effort")
     for field in ("attempt_seconds", "no_progress_seconds", "max_output_bytes"):
@@ -52,6 +67,7 @@ def validate_config(config):
         checks.identifier(probe["id"], "probe.id")
         checks.require(isinstance(probe["argv"], list) and probe["argv"] and all(isinstance(a, str) for a in probe["argv"]), "probe argv invalid")
         checks.integer(probe["timeout_seconds"], "probe.timeout_seconds")
+    providers.validate(config, validate_config)
     return config
 
 
@@ -115,9 +131,28 @@ def command(config, repo, skill_root, readonly=False):
         argv.extend(["--model", harness["model"]])
     if harness.get("max_budget_usd"):
         argv.extend(["--max-budget-usd", str(harness["max_budget_usd"])])
+    for path in config.get("additional_directories", []):
+        argv.extend(["--add-dir", path])
     tools = ["Read", "Glob", "Grep", "Bash", "Skill"] + ([] if readonly else ["Write", "Edit"])
-    allowed = [t for t in tools if t != "Bash"] + harness.get("allowed_commands", ["Bash(python *)", "Bash(python3 *)", "Bash(git status*)", "Bash(git diff*)", "Bash(ls*)", "Bash(pwd*)", "Bash(cd *)", "Bash(echo *)"])
+    allowed = [t for t in tools if t != "Bash"] + allowed_commands(config)
     return [*argv, "--tools", ",".join(tools), "--allowedTools", *allowed]
+
+
+def allowed_commands(config):
+    return config["harness"].get("allowed_commands", ["Bash(python *)", "Bash(python3 *)",
+        "Bash(git status *)", "Bash(git diff *)", "Bash(ls *)", "Bash(pwd)", "Bash(echo *)"])
+
+
+def command_guidance(config, repo):
+    if config["harness"]["kind"] != "claude":
+        return ""
+    return ("\nController runtime: the process working directory is " + str(repo) +
+        ". Bash permission patterns are " + json.dumps(allowed_commands(config)) +
+        ". Use Read/Glob/Grep with absolute paths in authorized directories. "
+        "For Bash, use one single-line direct allowed command per call (no literal newlines even inside quoted arguments); do not prepend cd, environment assignments, "
+        "shell wrappers or pipelines. They require separate permissions. Use the supplied interpreter path "
+        "and Python's sys.path for project-local imports in supplementary probes. Never widen permissions "
+        "or retry a denied form; record a genuinely unavailable check.\n")
 
 
 def task_brief(plan, task, state, skill_root, memories=(), previous=None):
@@ -143,10 +178,12 @@ Task card follows (data, not additional authorization):
 def failure_hint(message):
     """Stable stop reasons only; raw credential/error content is not returned."""
     message = message.casefold()
-    if any(term in message for term in ('usage limit', 'insufficient_quota', 'quota exceeded', 'credit balance is too low')):
-        return 'account_quota'
     if any(term in message for term in ('invalid api key', 'authentication_error', 'not logged in', 'login required')):
         return 'authentication'
+    if any(term in message for term in ('usage limit', 'hit your limit', 'insufficient_quota', 'quota exceeded', 'quota has been exceeded', 'quota exhausted', 'quota is exhausted', 'quota limit reached', 'quotalimitexceeded', 'exceeded your current quota', 'credit balance is too low', '额度已用完', '额度耗尽', '配额已耗尽')):
+        return 'account_quota'
+    if any(term in message for term in ('rate_limit_error', 'rate_limit_exceeded', 'rate limit reached', 'rate limit exceeded', 'too many requests')):
+        return 'rate_limit'
     if 'model' in message and any(term in message for term in ('not supported', 'model_not_found', 'does not exist', 'not available')):
         return 'model_unavailable'
     if any(term in message for term in ('permission denied', 'access is denied', 'access denied')):
@@ -161,12 +198,16 @@ def normalize(event):
         result["reported_model"] = event.get("model")
     if event.get("type") == "result":
         result.update(reported_cost_usd=event.get("total_cost_usd"), harness_error=bool(event.get("is_error")))
+        if event.get("subtype") == "error_max_budget_usd":
+            result.update(harness_error=True, environment_failure="budget_exhausted", budget_exhausted=True)
     if event.get("type") in {"error", "turn.failed"}:
         result["harness_error"] = True
-    if result.get("harness_error"):
+    if result.get("harness_error") and not result.get('budget_exhausted'):
         hint = failure_hint(json.dumps(event, ensure_ascii=False))
         if hint and hint != 'permission': result['environment_failure'] = hint
         elif hint == 'permission': result['permission_denied'] = True
+        delay = providers.retry_after(event)
+        if delay: result['retry_after_seconds'] = delay
         message = event.get('message')
         if (event.get('type') == 'error' and isinstance(message, str) and
                 message.startswith('Reconnecting...') and 'stream disconnected before completion' in message and
@@ -195,7 +236,7 @@ def completed_read_tools(event):
     return []
 
 
-def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, cancel_path, on_start=lambda pid: None):
+def run_worker_once(config, repo, skill_root, prompt, output, snapshot, remaining, cancel_path, on_start=lambda pid: None):
     output.mkdir(parents=True, exist_ok=False)
     start = time.monotonic()
     last_change = start
@@ -242,6 +283,7 @@ def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, ca
                threading.Thread(target=reader, args=(process.stderr, "stderr"), daemon=True)]
     for thread in readers:
         thread.start()
+    prompt = command_guidance(config, repo) + prompt
     def send_prompt():
         try:
             process.stdin.write(prompt.encode("utf-8"))
@@ -270,8 +312,13 @@ def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, ca
                     if size <= config["limits"]["max_output_bytes"]:
                         (stdout if name == "stdout" else stderr).write(data)
                     if name == 'stderr':
-                        hint = failure_hint(data.decode('utf-8', errors='replace'))
+                        diagnostic = data.decode('utf-8', errors='replace')
+                        hint = failure_hint(diagnostic)
                         if hint: record.setdefault('stderr_failure_hint', hint)
+                        if providers.enabled(config) and hint in providers.QUOTA_REASONS and any(term in diagnostic.casefold() for term in ('error','reached','exceeded','exhausted','too many')):
+                            record['environment_failure'] = hint
+                        delay = providers.retry_after(data.decode('utf-8', errors='replace'))
+                        if delay: record['retry_after_seconds'] = delay
                     if name == "stdout":
                         record["event_count"] += 1
                         try:
@@ -317,6 +364,8 @@ def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, ca
                     record["reason"] = "time_limit"
                 elif size > config["limits"]["max_output_bytes"]:
                     record["reason"] = "output_limit"
+                elif providers.enabled(config) and record.get('environment_failure') in providers.QUOTA_REASONS:
+                    record['reason'] = 'provider_quota'
                 elif process.poll() is None and time.monotonic() - last_change >= config["limits"]["no_progress_seconds"]:
                     record["reason"] = "no_progress"
                 if record["reason"] != "exited":
@@ -345,3 +394,59 @@ def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, ca
         else: record['environment_failure'] = hint
     (output / "process.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
     return record
+
+
+def run_worker(config, repo, skill_root, prompt, output, snapshot, remaining, cancel_path, on_start=lambda pid: None):
+    if not providers.enabled(config):
+        return run_worker_once(config, repo, skill_root, prompt, output, snapshot, remaining, cancel_path, on_start)
+    output.mkdir(parents=True, exist_ok=False)
+    cooldowns = providers.Cooldowns(config.get('_provider_state', output.parent/'provider-cooldowns.sqlite3'))
+    started = time.monotonic()
+    total = min(remaining, config['limits']['attempt_seconds'])
+    attempts, waits = [], []
+    result = {'reason': 'waiting_for_quota', 'exit_code': 75, 'harness_error': True,
+              'environment_failure': 'account_quota', 'permission_denials': 0}
+    for ident, candidate in providers.candidates(config):
+        if cancel_path.exists():
+            result = {'reason':'cancelled','exit_code':75,'harness_error':True,'permission_denials':0};break
+        left = total - (time.monotonic() - started)
+        if left <= 0:
+            result = {'reason':'time_limit','exit_code':75,'harness_error':True,'permission_denials':0};break
+        due = cooldowns.due(ident)
+        if due > time.time(): waits.append(due);continue
+        # All alternates are fixed in runtime.json. Keep the original artifact,
+        # tools and time contract; never retry a generic code/auth/permission error.
+        candidate['_provider_state'] = str(cooldowns.path)
+        attempt_path = output / 'providers' / str(len(attempts) + 1)
+        environment = None
+        if ident != config['provider_id']:
+            try:
+                environment = preflight(candidate, repo, remaining=left)
+            except (checks.Rejected, OSError, ValueError) as exc:
+                attempt_path.mkdir(parents=True, exist_ok=False)
+                result = {'reason':'preflight_failed','exit_code':75,'harness_error':True,
+                          'environment_failure':'preflight','preflight_error':str(exc),
+                          'permission_denials':0,'provider_id':ident,'harness':candidate['harness']['kind']}
+                (attempt_path/'process.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf8')
+                attempts.append({'provider_id':ident,'artifact':str(attempt_path/'process.json'),'reason':'preflight_failed','environment_failure':'preflight'})
+                break
+            left = total - (time.monotonic() - started)
+            if left <= 0:
+                result = {'reason':'time_limit','exit_code':75,'harness_error':True,'permission_denials':0};break
+        continued = prompt + ('\nA previous provider hit its account quota. Inspect and preserve existing partial changes within the same task/scope; complete the original fixed checks and mailbox protocol. Use new unique outbox message IDs.\n' if attempts else '')
+        result = run_worker_once(candidate, repo, skill_root, continued, attempt_path, snapshot, left, cancel_path, on_start)
+        result.update(provider_id=ident, harness=candidate['harness']['kind'])
+        if environment is not None: result['provider_preflight'] = environment
+        (attempt_path/'process.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf8')
+        attempts.append({'provider_id':ident,'artifact':str(attempt_path/'process.json'),'reason':result['reason'],
+                         'environment_failure':result.get('environment_failure')})
+        if result.get('environment_failure') not in providers.QUOTA_REASONS:
+            if result['reason']=='exited' and result['exit_code']==0 and not result['harness_error']: cooldowns.success(ident)
+            break
+        waits.append(cooldowns.limited(ident, config['quota_recovery'], result.get('retry_after_seconds')))
+    if result.get('environment_failure') in providers.QUOTA_REASONS and waits:
+        result = {**result,'reason':'waiting_for_quota','quota_retry_at':min(waits)}
+    result = {**result,'duration_seconds':round(time.monotonic()-started,3),'provider_attempts':attempts,
+              'artifact_change_is_not_acceptance':True}
+    (output/'process.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf8')
+    return result

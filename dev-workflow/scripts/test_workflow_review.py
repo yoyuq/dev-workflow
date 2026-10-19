@@ -36,6 +36,29 @@ if mode=='failed_with_report': raise SystemExit(1)
 
 
 class ReviewTests(unittest.TestCase):
+    def test_copying_prompt_report_schema_keeps_exact_task_or_integration_binding(self):
+        # Reproduce a real native reviewer copying the displayed JSON example.
+        # This must work even when the briefing is too large to embed.
+        for task_id, padding in [('STORAGE', ''), ('integration', 'x' * 30000)]:
+            with self.subTest(task_id=task_id), tempfile.TemporaryDirectory() as name:
+                folder = Path(name)
+                expected = {'head': '8a044238f4754c5b247ac1cfa193b9cb80ef3351',
+                            'task_id': task_id, 'contracts': {'storage-api': 3}, 'revision': 2}
+                brief = {'binding': expected, 'focus': {'mode': 'full', 'patch': 'changes.patch'},
+                         'extra_evidence': padding}
+                (folder/'brief.json').write_text(json.dumps(brief), encoding='utf8')
+                (folder/'changes.patch').write_text('diff --git a/test.py b/test.py\n', encoding='utf8')
+                prompt = review.reviewer_prompt(folder)
+                example = json.loads(next(line for line in prompt.splitlines() if line.startswith('{"binding":')))
+                example.update(decision='approve', summary='Inspected source and contract behavior',
+                               findings=[], validation=['Independent supplementary check passed'])
+                context = {'binding': expected, 'task_ids': ['STORAGE']}
+                self.assertEqual(review.validate_report(example, context)['binding'], expected)
+                empty = copy.deepcopy(example)
+                empty['binding'] = {}
+                with self.assertRaisesRegex(checks.Rejected, 'binding mismatch'):
+                    review.validate_report(empty, context)
+
     def execute(self, mode):
         base = Path(self.temp.name).resolve()
         plan, root = fixture(base)
@@ -239,7 +262,7 @@ class ReviewTests(unittest.TestCase):
 
     def test_prompt_embeds_small_complete_inputs_and_leaves_large_inputs_readable(self):
         folder=Path(self.temp.name)
-        (folder/'brief.json').write_text(json.dumps({'focus':{'mode':'full','patch':'focus.patch'},'requirement':'exact sentinel'}))
+        (folder/'brief.json').write_text(json.dumps({'binding':{'head':'a'*40,'task_id':'A','contracts':{},'revision':0},'focus':{'mode':'full','patch':'focus.patch'},'requirement':'exact sentinel'}))
         (folder/'focus.patch').write_text('+ complete delta sentinel')
         small=review.reviewer_prompt(folder)
         self.assertIn('exact sentinel',small)
@@ -253,7 +276,7 @@ class ReviewTests(unittest.TestCase):
 
     def test_small_repair_receives_full_index_and_both_diffs_once(self):
         folder=Path(self.temp.name)
-        (folder/'brief.json').write_text(json.dumps({'focus':{'mode':'repair','patch':'focus.patch'}}))
+        (folder/'brief.json').write_text(json.dumps({'binding':{'head':'a'*40,'task_id':'A','contracts':{},'revision':0},'focus':{'mode':'repair','patch':'focus.patch'}}))
         (folder/'context.json').write_text(json.dumps({'complete_history':'unique history marker'}))
         (folder/'focus.patch').write_text('unique repair marker')
         (folder/'changes.patch').write_text('unique full task marker')

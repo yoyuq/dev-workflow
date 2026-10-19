@@ -14,6 +14,8 @@
 
 AI 默认在当前对话里工作：小修复用短计划，完整功能和项目改造深入访谈并显示具体功能节点。你不需要填写 JSON，也不需要启动服务器。独立运行所需的配置、模块拆解和验收由 AI 准备；需求确认仍来自你的真实回答。
 
+要按功能逐个交付远程 PR，可以说：“用功能子 PR 模式开发，按复杂度、依赖和风险拆任务，运行中发现任务过大可在原目标内细分。”AI 会准备拆分依据、固定检查、预算和协调者配置。子功能逐个验收后，原任务仍检查完整结果；详见 [任务拆分](references/task-partitioning.md)。
+
 ## 手动安装（可选）
 
 需要 Python 3.10+；控制器还需要 Git 和已登录的原生 CLI。在解压后的 `dev-workflow` 目录打开终端，选一条：
@@ -70,6 +72,8 @@ doctor 默认只检查包、Python、Git、CLI 和项目基线。`--live` **会�
 自动运行建议用 `setup --model 已验证的模型ID` 固定本次模型；不指定则沿用宿主配置，宿主变更可能影响后续阶段。高级用法仅在需要时读 [统一入口](references/entrypoint.md)、[分支协作](references/coordination.md) 或 [服务器部署](references/service.md)。
 
 ## 语言 / Language
+
+需要逐功能自动 PR 时，可直接告诉 AI：“使用 dev-workflow，先讨论项目的改进方向，再把确认的功能逐个开发、测试和创建子 PR，合并到本次专属工作分支；合并后回归失败就普通 revert 并修复重试，最后交付草稿主 PR。”AI 负责调查远程仓库、准备固定测试、预算与授权记录。首次支持 GitHub，功能串行验收，最终不自动合并到项目 main。详见 [功能子 PR](references/feature-prs.md)。
 
 默认英文；本机可选中文。首次使用时告诉 AI “这套工作流使用中文”，或运行 `python scripts/workflow_locale.py --set zh-CN`。看板右上角切换并记住浏览器语言；任务输出沿用本地偏好或计划的 `locale`。[完整规则](references/language.md)。个人偏好不打进安装包。
 
