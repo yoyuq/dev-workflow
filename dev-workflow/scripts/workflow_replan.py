@@ -156,8 +156,15 @@ def activate(base, plan, state, bus, proposal, validator):
         checks.require(not entry.get('retry_gate'), 'diagnose and resolve the original retry gate before functional splitting')
         checks.require(entry['attempts'] < plan['limits']['max_attempts'], 'functional parent has no attempt left for full acceptance')
     checks.require(sum(e['attempts'] for e in state['tasks'].values()) < bound['max_total_attempts'], 'total attempt budget exhausted')
-    new_count = len(candidate['tasks']) - len(plan['tasks'])
-    checks.require(sum(e['attempts'] for e in state['tasks'].values()) + new_count + len(proposal.get('split', [])) <= bound['max_total_attempts'], 'not enough original attempts for children and full parent acceptance')
+    # Reserve a launch for every unfinished owner/sibling, including ancestors
+    # of a nested split. Unchanged quota continuations retain their current
+    # attempt; a revised task is reset to pending below and needs a fresh one.
+    launches = [task['id'] for task in candidate['tasks'] if task['id'] not in old or
+                task != old[task['id']] or state['tasks'][task['id']]['status'] in {'pending', 'blocked', 'failed'}]
+    checks.require(all(state['tasks'].get(tid, {}).get('attempts', 0) < plan['limits']['max_attempts'] for tid in launches),
+                   'unfinished task has no attempt left for full acceptance')
+    checks.require(sum(e['attempts'] for e in state['tasks'].values()) + len(launches) <= bound['max_total_attempts'],
+                   'not enough original attempts for all unfinished tasks and full parent acceptance')
     for task in candidate["tasks"]:
         tid = task["id"]
         if tid in old and task != old[tid]:

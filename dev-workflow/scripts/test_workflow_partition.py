@@ -168,6 +168,44 @@ class PartitionTests(unittest.TestCase):
                         'ORIGINAL-DEPENDENCY':{'status':'integrated'}}, 'milestones':{}}
         self.assertFalse(coord.ready('X',tasks,state))
 
+    def test_nested_split_reserves_attempts_for_original_owner_and_pending_sibling(self):
+        c=self.case;c.plan['limits']['max_attempts']=3;c.plan['replanning']['max_total_attempts']=5
+        c.initialize();bus=Bus(c.root);state=bus.state();state['tasks']['A'].update(status='blocked',attempts=1)
+        child=lambda tid:{'id':tid,'goal':'Original scoped behavior','allowed_scope':['a.txt'],
+            'checks':['a'],'depends_on':[],'partition':profile()}
+        proposal=lambda ident,parent,ids,revision:{'id':ident,'expected_revision':revision,'reason':'Observed functional boundaries',
+            'add':[],'dependencies':{},'split':[{'parent':parent,'reason':'Retain complete parent acceptance','children':[child(tid) for tid in ids]}]}
+        initial=copy.deepcopy(state)
+        first=replan.activate(c.plan,c.plan,state,bus,proposal('first','A',['X','Y'],0),coord.validate)
+        state['tasks']['X'].update(status='blocked',attempts=1);bus.save(state,'simulated_nested_split')
+        before=copy.deepcopy(state);nested=proposal('nested','X',['X1','X2'],1)
+        with self.assertRaisesRegex(checks.Rejected,'not enough original attempts'):
+            replan.activate(c.plan,first,state,bus,nested,coord.validate)
+        self.assertEqual(state,before);self.assertEqual(bus.state(),before)
+        # Seven total attempts suffice: A/X consumed two; five unfinished
+        # owners/children each still need their own launch and acceptance.
+        sufficient=copy.deepcopy(c.plan);sufficient['replanning']['max_total_attempts']=7
+        fresh=copy.deepcopy(initial);fresh_root=c.base/'sufficient-replan';fresh_root.mkdir()
+        fresh_bus=Bus(fresh_root);fresh_bus.initialize(fresh)
+        first_sufficient=replan.activate(sufficient,sufficient,fresh,fresh_bus,proposal('first','A',['X','Y'],0),coord.validate)
+        fresh['tasks']['X'].update(status='blocked',attempts=1)
+        revised=replan.activate(sufficient,first_sufficient,fresh,fresh_bus,nested,coord.validate)
+        self.assertEqual(len(revised['tasks']),5)
+
+    def test_nested_split_cannot_spend_an_exhausted_ancestor_attempt(self):
+        c=self.case;c.plan['limits']['max_attempts']=3;c.plan['replanning']['max_total_attempts']=12
+        c.initialize();bus=Bus(c.root);state=bus.state();state['tasks']['A'].update(status='blocked',attempts=1)
+        child=lambda tid:{'id':tid,'goal':'Original scoped behavior','allowed_scope':['a.txt'],
+            'checks':['a'],'depends_on':[],'partition':profile()}
+        proposal=lambda ident,parent,ids,revision:{'id':ident,'expected_revision':revision,'reason':'Observed functional boundaries',
+            'add':[],'dependencies':{},'split':[{'parent':parent,'reason':'Retain complete parent acceptance','children':[child(tid) for tid in ids]}]}
+        first=replan.activate(c.plan,c.plan,state,bus,proposal('first','A',['X','Y'],0),coord.validate)
+        state['tasks']['X'].update(status='blocked',attempts=1);state['tasks']['A']['attempts']=3
+        before=copy.deepcopy(state)
+        with self.assertRaisesRegex(checks.Rejected,'unfinished task has no attempt left'):
+            replan.activate(c.plan,first,state,bus,proposal('nested','X',['X1','X2'],1),coord.validate)
+        self.assertEqual(state,before)
+
     def test_parent_review_child_repair_revalidates_dependents_without_empty_pr_or_deadlock(self):
         c=self.case;c.plan['partitioning']['thresholds']['max_changed_files']=2
         c.plan['limits']['max_attempts']=3;c.plan['replanning']['max_total_attempts']=9

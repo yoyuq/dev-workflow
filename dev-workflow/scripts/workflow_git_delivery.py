@@ -177,7 +177,9 @@ def rollback(root, plan, tasks, state, bus, entry, intent, api, git, new_worktre
     if api.ref(state['integration_branch']) != target: raise Blocked('Remote branch changed during restored regression')
     local = git(repo, 'rev-parse', state['integration_branch'])
     if local != target:
-        checks.require(local == intent['before'], 'local work branch changed during revert')
+        # A crash can follow settle's local ref update but precede acceptance.
+        # Both heads belong to this checked intent; an unknown head stays intact.
+        checks.require(local in (intent['before'], merged), 'local work branch changed during revert')
         git(repo, 'update-ref', 'refs/heads/' + state['integration_branch'], target, local)
     pr = current(entry);pr.update(phase='reverted', merge_head=merged, rollback_head=target)
     remote['rollbacks'].append({'task_id': intent['task_id'], 'pr': pr['url'], 'merged': merged, 'restored': target, 'tree_restored': True, 'checks': records})
@@ -230,7 +232,7 @@ def settle(root, plan, tasks, state, bus, git, new_worktree, verify, accept, rem
     reserve = rollback_budget(plan, state, tasks)
     try:
         records = post_checks(root, plan, ids, workspace, root/'checks'/('parent-' + tid + '-' + token), verify, lambda: max(0, remaining() - reserve))
-    except checks.Rejected as exc:
+    except (checks.Rejected, OSError) as exc:
         folder=root/'checks'/('parent-' + tid + '-' + token);folder.mkdir(parents=True,exist_ok=True)
         evidence=folder/'regression-unavailable.log';evidence.write_text(str(exc),encoding='utf-8')
         intent.update(checks_failed=True, checks=[{'task_id':'remote-integration','check_id':'regression-unavailable','result':'failed','log':evidence.name,'evidence_path':str(evidence)}])

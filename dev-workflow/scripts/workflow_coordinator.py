@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import copy
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import queue
@@ -36,11 +37,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class CancelFlags:
-    def __init__(self, *paths):
+    def __init__(self, *paths, pause=lambda: False):
         self.paths = paths
+        self.pause = pause
 
     def exists(self):
-        return any(path.exists() for path in self.paths)
+        return self.pause() or any(path.exists() for path in self.paths)
 
 
 def validate(plan):
@@ -616,8 +618,13 @@ def recover(root):
         checks.require(not serial.process_alive(checks.read_json(lock)["pid"]), "controller may still be running")
     for pid in [state.get("coordinator_pid"), *[s.get("pid") for s in state["tasks"].values()], *[p["pid"] for p in bus.live_candidates()]]:
         checks.require(not pid or not serial.process_alive(pid), "a recorded worker may still be running")
+    quota_paused = state.get('coordinator_quota_pause') or (
+        state['status'] == 'waiting_for_quota' and not state.get('coordinator_active') and
+        not any(entry['status'] in {'creating', 'running', 'committing'} for entry in state['tasks'].values()))
+    quota_boundary = state.get('quota_wait', {}).get('since') if quota_paused else None
     if state["session_started"]:
-        state["elapsed_seconds"] += max(0, time.time() - state["session_started"])
+        ended = min(time.time(), quota_boundary) if quota_boundary is not None else time.time()
+        state["elapsed_seconds"] += max(0, ended - state["session_started"])
     intent = state.get("integration_intent")
     actual = git(repo, "rev-parse", state["integration_branch"])
     if intent and intent.get('remote'):
@@ -651,8 +658,23 @@ def recover(root):
                 entry.update(status=committed_status(tasks[tid], entry), commit=current["head"], pid=None)
             else:
                 serial.require_scope(tasks[tid], entry["baseline"], current)
-                entry.update(status="pending", pid=None, reason="Interrupted attempt preserved; retry starts a new worktree",
-                             feedback={"previous_workspace": str(workspace), "reason": "Controller interrupted"})
+                if state.get('coordinator_quota_pause') and state.get('quota_wait'):
+                    began = entry.get('worker_preflight', {}).get('started_at', state.get('session_started') or time.time())
+                    process_folder = root / 'attempts' / tid / str(entry['attempts'])
+                    if entry.get('quota_resumptions'):
+                        process_folder = process_folder / 'quota-resumes' / str(entry['quota_resumptions'])
+                    try:
+                        duration = checks.read_json(process_folder / 'process.json').get('duration_seconds')
+                    except (checks.Rejected, OSError, ValueError):
+                        duration = None
+                    recorded = type(duration) in (int, float) and math.isfinite(duration) and duration >= 0
+                    spent = duration if recorded else max(0, min(time.time(), quota_boundary) - began)
+                    entry['quota_attempt_elapsed_seconds'] = entry.get('quota_attempt_elapsed_seconds', 0) + spent
+                    entry['quota_recovery_timing'] = {'seconds': spent, 'source': 'process' if recorded else 'quota_pause_boundary'}
+                    entry.update(status='quota_wait', pid=None, reason='Coordinator quota; preserved interrupted draft and attempt')
+                else:
+                    entry.update(status="pending", pid=None, reason="Interrupted attempt preserved; retry starts a new worktree",
+                                 feedback={"previous_workspace": str(workspace), "reason": "Controller interrupted"})
     state.update(session_started=None, coordinator_pid=None, coordinator_active=False, status="ready")
     bus.save(state, "recovered")
     if lock.exists():
@@ -747,8 +769,13 @@ def run(root):
                 'final_checks': [], 'note': 'Response/state retained; original time budget exhausted, no task dispatched.'})
             return 3
         if state.get('quota_wait'):
-            if state['quota_wait']['retry_at'] > time.time(): return 3
+            if state['quota_wait']['retry_at'] > time.time():
+                if state['status'] != 'blocked_environment':
+                    state['status'] = 'waiting_for_quota'
+                    bus.save(state, 'quota_wait_retained', retry_at=state['quota_wait']['retry_at'])
+                return 3
             wait = state.pop('quota_wait')
+            state.pop('coordinator_quota_pause', None)
             state['quota_wait_seconds'] = state.get('quota_wait_seconds', 0) + max(0, time.time()-wait['since'])
             for entry in state['tasks'].values():
                 if entry['status'] == 'quota_wait': entry['status'] = 'quota_resume'
@@ -823,8 +850,7 @@ def run(root):
                     try:
                         process = future.result()
                         entry.update(pid=None, process=process)
-                        if providers.enabled(configs['worker']):
-                            entry['quota_attempt_elapsed_seconds'] = entry.get('quota_attempt_elapsed_seconds',0) + process['duration_seconds']
+                        entry['quota_attempt_elapsed_seconds'] = entry.get('quota_attempt_elapsed_seconds',0) + process['duration_seconds']
                         entry["history"].append({"attempt": entry["attempts"], "workspace": str(workspace), "process": process})
                         checks.require(not entry.get("mailbox_error"), "invalid worker mailbox: " + str(entry.get("mailbox_error")))
                         bus.ingest(tid, entry["attempts"], workspace, tasks)
@@ -832,6 +858,13 @@ def run(root):
                             serial.require_scope(tasks[tid], entry['baseline'], source_snapshot(workspace, plan['tasks']))
                             entry.update(status='quota_wait', reason='Provider quota; preserved same attempt and workspace')
                             providers.pause(state, bus, process['quota_retry_at'], task=tid)
+                            continue
+                        if (process['reason'] == 'cancelled' and state.get('coordinator_quota_pause') and
+                                not process.get('environment_failure') and not process.get('permission_denials') and
+                                not cancel.exists() and not Path(entry['cancel_path']).exists()):
+                            serial.require_scope(tasks[tid], entry['baseline'], source_snapshot(workspace, plan['tasks']))
+                            entry.update(status='quota_wait', reason='Coordinator quota; preserved same attempt and workspace')
+                            bus.save(state, 'quota_worker_paused', task=tid, attempt=entry['attempts'])
                             continue
                         if process.get("environment_failure"):
                             entry.update(status="blocked", reason=process["environment_failure"])
@@ -868,8 +901,14 @@ def run(root):
                     result = coordinator_future.result()
                     state.update(coordinator_pid=None, coordinator_active=False)
                     try:
+                        if (result.get('environment_failure') and result['environment_failure'] not in providers.QUOTA_REASONS) or result.get('permission_denials'):
+                            state['status'] = 'blocked_environment'
+                            state['coordinator_environment_failure'] = result.get('environment_failure') or 'permission'
+                            cancel.write_text('coordinator environment failure', encoding='utf-8')
+                            raise checks.Rejected('coordinator environment failure: ' + state['coordinator_environment_failure'])
                         if result.get('quota_retry_at'):
                             state['coordinator_quota_rounds'] = state.get('coordinator_quota_rounds', 0) + 1
+                            state['coordinator_quota_pause'] = True
                             providers.pause(state, bus, result['quota_retry_at'], task='coordinator')
                             raise providers.QuotaWait(result['quota_retry_at'])
                         checks.require(result["reason"] == "exited" and result["exit_code"] == 0 and not result["harness_error"], "coordinator invocation failed")
@@ -947,7 +986,7 @@ def run(root):
                 if informational:
                     bus.ack("coordinator", informational)
                 pending = [m for m in pending if m["kind"] in {"question", "blocked", "change_request"} and not m["resolved"] and not state["tasks"][m["sender"]].get("needs_human")]
-                if pending and not state.get('quota_wait') and not coordinator_future and configs.get("coordinator") and state["coordinator_rounds"] - state.get('coordinator_quota_rounds',0) < plan["limits"]["max_coordinator_rounds"]:
+                if pending and not state.get('quota_wait') and not cancel.exists() and available() > 0 and not coordinator_future and configs.get("coordinator") and state["coordinator_rounds"] - state.get('coordinator_quota_rounds',0) < plan["limits"]["max_coordinator_rounds"]:
                     state["coordinator_rounds"] += 1
                     coordinator_output = root / "decisions" / str(state["coordinator_rounds"])
                     coordinator_output.mkdir(parents=True)
@@ -1017,7 +1056,7 @@ def run(root):
                     (output.parent / f"prompt-{entry['attempts']}.txt").write_text(prompt, encoding="utf-8")
                     bus.save(state, "task_started", task=tid, attempt=entry["attempts"], branch=branch, base=state["integration_head"])
                     active[tid] = executor.submit(supervised_worker, root, f"{tid}-{entry['attempts']}", configs["worker"], workspace, Path(plan["skill_root"]),
-                        prompt, output, lambda w=workspace, t=tasks[tid]: fast_snapshot(w, t), available(), CancelFlags(cancel, Path(entry["cancel_path"])),
+                        prompt, output, lambda w=workspace, t=tasks[tid]: fast_snapshot(w, t), available(), CancelFlags(cancel, Path(entry["cancel_path"]), pause=lambda: state.get('coordinator_quota_pause', False)),
                         on_start=lambda pid, t=tid: starts.put((t, pid)))
                     held.update(tasks[tid].get("resources", []))
                 # A quota wait resumes the exact draft and attempt. Provider
@@ -1033,11 +1072,13 @@ def run(root):
                     entry['worker_preflight']['started_at'] = time.time()
                     entry.update(status='running', pid=None, reason='Resuming preserved draft after provider cooldown')
                     output = root/'attempts'/tid/str(entry['attempts'])/'quota-resumes'/str(entry['quota_resumptions'])
-                    prompt = worker_prompt(plan, tasks[tid], entry, state) + '\nResume this exact workspace after quota wait. Preserve prior changes and original task scope; do not reuse an outbox message ID.\n'
+                    prompt = worker_prompt(plan, tasks[tid], entry, state) + ('\nResume this exact workspace after quota wait. Preserve prior changes and original task scope. '
+                        'Read the existing inbox and outbox first; process queued decisions/replies and reuse outstanding business questions instead of posting duplicates. '
+                        'Use a fresh outbox message ID only for a genuinely new message; do not replay prior outbox entries.\n')
                     bus.deliver(tid, workspace, state['contracts'])
                     bus.save(state, 'quota_worker_resumed', task=tid, attempt=entry['attempts'], resumption=entry['quota_resumptions'])
-                    active[tid] = executor.submit(supervised_worker, root, f"{tid}-{entry['attempts']}", configs['worker'], workspace, Path(plan['skill_root']), prompt, output,
-                        lambda w=workspace,t=tasks[tid]: fast_snapshot(w,t), max(0,min(available(),configs['worker']['limits']['attempt_seconds']-entry.get('quota_attempt_elapsed_seconds',0))), CancelFlags(cancel,Path(entry['cancel_path'])), on_start=lambda pid,t=tid: starts.put((t,pid)))
+                    active[tid] = executor.submit(supervised_worker, root, f"{tid}-{entry['attempts']}-quota-{entry['quota_resumptions']}", configs['worker'], workspace, Path(plan['skill_root']), prompt, output,
+                        lambda w=workspace,t=tasks[tid]: fast_snapshot(w,t), max(0,min(available(),configs['worker']['limits']['attempt_seconds']-entry.get('quota_attempt_elapsed_seconds',0))), CancelFlags(cancel,Path(entry['cancel_path']), pause=lambda: state.get('coordinator_quota_pause', False)), on_start=lambda pid,t=tid: starts.put((t,pid)))
                     held.update(tasks[tid].get('resources', []))
                 bus.save(state, "tick")
                 human.export(root, plan, tasks, state, bus)
@@ -1092,7 +1133,7 @@ def run(root):
                 m["required"] and not m["acked"] for m in bus.messages())
             unresolved = bus.unresolved()
             state["status"] = "completed" if complete and not unresolved and not cancel.exists() and available() > 0 else ("blocked_environment" if state["status"] == "blocked_environment" else "partial")
-            if configs.get("reviewer") and (state.get("final_review", {}).get("decision") != "approve" or state.get("final_review", {}).get("binding") != review.binding(plan, state, state["integration_head"], "integration")):
+            if state['status'] == 'completed' and configs.get("reviewer") and (state.get("final_review", {}).get("decision") != "approve" or state.get("final_review", {}).get("binding") != review.binding(plan, state, state["integration_head"], "integration")):
                 state["status"] = "partial"
             if state["status"] == "completed":
                 if (state.get('final_audit_head') != state['integration_head'] or not state.get('final_checks') or

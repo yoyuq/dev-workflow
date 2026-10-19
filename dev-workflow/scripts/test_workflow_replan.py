@@ -112,6 +112,19 @@ class ReplanTests(unittest.TestCase):
         self.assertEqual(self.state['session_started'], 1234.5)
         self.assertEqual(self.state['elapsed_seconds'], 12)
 
+    def test_attempt_reserve_keeps_unchanged_quota_continuation_in_its_current_attempt(self):
+        first=self.activate();baseline=copy.deepcopy(self.state)
+        proposal=copy.deepcopy(self.proposal);proposal.update(id='second',expected_revision=1)
+        proposal['add'][0]['id']='PREP2'
+        for status in ('quota_wait','quota_resume'):
+            with self.subTest(status=status):
+                self.state.clear();self.state.update(copy.deepcopy(baseline))
+                self.state['tasks']['PREP'].update(status=status,attempts=self.plan['limits']['max_attempts'])
+                revised=replan.activate(self.plan,first,self.state,self.bus,proposal,coord.validate)
+                self.assertEqual(len(revised['tasks']),3)
+                self.assertEqual(self.state['tasks']['PREP']['status'],status)
+                self.assertEqual(self.state['tasks']['PREP']['attempts'],2)
+
     def test_existing_feature_split_checkpoint_replays_without_new_fields(self):
         fixture = checks.read_json(Path(__file__).resolve().parents[1] / 'assets/feature-split-v1.fixture.json')
         self.assertEqual(replan.materialize(fixture['base'], fixture['state']), fixture['expected'])
