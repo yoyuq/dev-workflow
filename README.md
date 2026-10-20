@@ -8,6 +8,8 @@ The Skill includes eight task-specific modules and an optional Python controller
 
 The default entry is small: align the goal, make a proportionate plan, implement and verify. Advanced automation is loaded when needed. Frontend work starts with a [short engineering guide](dev-workflow/references/frontend.md); the AI chooses the visual direction from the brief and existing project. Taste and Impeccable remain optional tools, with no required theme, font, layout preset or design-engine setup for ordinary UI work.
 
+Prepared workers receive complete small guides directly in their task card (24 KiB content budget), reducing startup file-read round trips. Large guides remain available on disk without truncation. Ordinary sessions batch relevant investigation and reuse unchanged check evidence; fixed gates, independent acceptance and post-merge regression remain required.
+
 ## What it does
 
 - Starts with `grill-me`: resolves decisions that affect delivery before starting a new goal.

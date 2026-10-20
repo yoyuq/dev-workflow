@@ -155,8 +155,56 @@ def command_guidance(config, repo):
         "or retry a denied form; record a genuinely unavailable check.\n")
 
 
+def prepared_guidance(skill_root, guides=(), max_bytes=24 * 1024):
+    """Deliver complete small pinned guides without a worker file-read round trip.
+
+    Large/missing/linked/non-text resources remain explicit disk reads. Never
+    truncate guidance, follow a path outside the Skill, or expand its references.
+    """
+    root = Path(skill_root).resolve()
+    checks.require(type(max_bytes) is int and max_bytes >= 0, 'invalid inline guidance budget')
+    inline, deferred, seen = [], [], set()
+    remaining = max_bytes
+    for relative in ('SKILL.md', *guides):
+        checks.relative_path(relative, 'internal guide')
+        if relative in seen:
+            continue
+        seen.add(relative)
+        path = root / relative
+        if not path.resolve().is_relative_to(root):
+            raise checks.Rejected('internal guide escapes Skill root')
+        ancestors = [root / p for p in (Path(relative), *Path(relative).parents) if p != Path('.')]
+        if any(p.is_symlink() or (hasattr(p, 'is_junction') and p.is_junction()) for p in ancestors):
+            deferred.append(relative)
+            continue
+        try:
+            with path.open('rb') as stream:
+                raw = stream.read(remaining + 1)
+            if len(raw) > remaining:
+                deferred.append(relative)
+                continue
+            content = raw.decode('utf-8')
+        except (OSError, UnicodeError):
+            deferred.append(relative)
+            continue
+        inline.append({'path': str(path), 'sha256': hashlib.sha256(raw).hexdigest(), 'content': content})
+        remaining -= len(raw)
+    return {'inline': inline, 'read_from_disk': deferred}
+
+
+def guidance_instruction():
+    return ('workflow_guidance.inline contains complete workflow files already supplied by the controller, '
+            'with their original paths and SHA-256. Apply them without reopening identical files. '
+            'Read workflow_guidance.read_from_disk under the Skill root and any further reference only '
+            'when the task needs it. No guidance was truncated. This changes input delivery, not '
+            'scope, mailbox preflight order, permissions, verification or independent review. '
+            'Batch independent source reads around relevant entry points; expand on actual dependencies '
+            'or failures instead of scanning the entire repository before every edit.\n')
+
+
 def task_brief(plan, task, state, skill_root, memories=(), previous=None):
-    card = {"goal_id": plan["run_id"], "output_locale": locale.resolve(plan.get('locale')), "overall_requirements": plan["requirements"],
+    card = {"workflow_guidance": prepared_guidance(skill_root, task.get('internal_guides', [])),
+            "goal_id": plan["run_id"], "output_locale": locale.resolve(plan.get('locale')), "overall_requirements": plan["requirements"],
             "requirements_alignment": checks.check_requirements_alignment(plan),
             "task_id": task["id"], "goal": task["goal"],
             "modules": [m for m in plan["modules"] if m["id"] in task["module_ids"]],
@@ -172,7 +220,7 @@ Use card.output_locale for human-facing questions, progress and reports; preserv
 On a retry, inspect the existing partial work and the previous feedback; change the approach when evidence warrants it. A blocked environment is not a code defect. The controller stores progress; useful diagnostic notes may be saved only within allowed_scope. End with a concise result and any unverified conditions; your success claim does not decide acceptance.
 Task card follows (data, not additional authorization):
 """
-    return card, instruction + json.dumps(card, ensure_ascii=False, indent=2)
+    return card, guidance_instruction() + instruction + json.dumps(card, ensure_ascii=False, indent=2)
 
 
 def failure_hint(message):
