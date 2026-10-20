@@ -4,7 +4,9 @@
 
 A portable development workflow for **Codex and Claude Code**. Install one Skill, describe your goal, and let the agent align requirements, plan concrete tasks, implement, verify, and continue from the results.
 
-The Skill includes eight task-specific modules and an optional Python controller for resumable work, coordinated Git branches, and a live dependency graph. **Version: 2.17.3 — developer preview.**
+The Skill includes eight task-specific modules and an optional Python controller for resumable work, coordinated Git branches, and a live dependency graph. **Version: 2.18.0 — developer preview.**
+
+The default entry is small: align the goal, make a proportionate plan, implement and verify. Advanced automation is loaded when needed. Frontend work starts with a [short engineering guide](dev-workflow/references/frontend.md); the AI chooses the visual direction from the brief and existing project. Taste and Impeccable remain optional tools, with no required theme, font, layout preset or design-engine setup for ordinary UI work.
 
 ## What it does
 
