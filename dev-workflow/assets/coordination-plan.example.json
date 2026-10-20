@@ -30,7 +30,7 @@
   ],
   "tasks": [
     {"id": "API", "module": "service", "title": "实现接口", "goal": "Implement the prepared API contract", "allowed_scope": ["src/api"], "depends_on": [], "requires": [], "produces": ["api-ready"], "contracts": ["api"], "resources": ["test-database"], "manual_review": [], "internal_guides": ["references/modules/backend-development/guide.md"], "verification": [{"id": "api-behavior", "argv": ["python", "-B", "/absolute/controller-inputs/check_api.py", "{repo}"], "cwd": ".", "timeout_seconds": 60}]},
-    {"id": "UI", "module": "client", "title": "实现界面", "goal": "Implement the prepared client against the accepted API", "allowed_scope": ["src/ui"], "depends_on": [], "requires": ["api-ready"], "produces": [], "contracts": ["api"], "resources": [], "manual_review": ["Review visual hierarchy at the prepared viewport sizes"], "internal_guides": ["references/modules/impeccable/guide.md"], "verification": [{"id": "ui-behavior", "argv": ["python", "-B", "/absolute/controller-inputs/check_ui.py", "{repo}"], "cwd": ".", "timeout_seconds": 60}]}
+    {"id": "UI", "module": "client", "title": "实现界面", "goal": "Implement the prepared client against the accepted API", "allowed_scope": ["src/ui"], "depends_on": [], "requires": ["api-ready"], "produces": [], "contracts": ["api"], "resources": [], "manual_review": ["Review visual hierarchy at the prepared viewport sizes"], "internal_guides": ["references/frontend.md"], "verification": [{"id": "ui-behavior", "argv": ["python", "-B", "/absolute/controller-inputs/check_ui.py", "{repo}"], "cwd": ".", "timeout_seconds": 60}]}
   ],
   "integration_checks": []
 }

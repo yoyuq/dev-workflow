@@ -151,7 +151,7 @@ def prepare(root, case="bugfix", behavior="success", skill_root=None, harness=No
         second = copy.deepcopy(task)
         second.update(id="T2", module_ids=["M2"], module_dependencies={"M1": ["T1"]}, depends_on=["T1"], allowed_scope=["static/index.html"],
                       goal="Build a small responsive Total page. Keep the existing server. Add button id=refresh, output id=total with aria-live. On click fetch /api/total and display total; show loading and a readable error on failure. Native HTML/CSS/JS only, no dependencies.",
-                      internal_guides=["references/modules/impeccable/guide.md"])
+                      internal_guides=["references/frontend.md"])
         second["acceptance_criteria"][0]["description"] = second["goal"]
         second["verification"][0]["argv"][-1] = "fullstack"
         if case == "regression":

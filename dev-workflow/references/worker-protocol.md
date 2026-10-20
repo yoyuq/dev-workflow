@@ -2,6 +2,8 @@
 
 本协议用于新建的协调运行。旧运行继续使用自己的冻结 Skill。Python 控制器必须能执行；工作者读写消息可以只使用宿主文件工具。
 
+新任务卡的 `workflow_guidance.inline` 直接提供小型完整入口和指定指南，带原路径与 SHA-256；应用其内容，不必再次打开相同文件。总内联内容上限 24 KiB，超出上限、缺失或非文本文件保留在 `read_from_disk`，按实际需要读取，不截断指南，也不递归打包引用。邮箱预检仍先执行，原验收与独立审阅不变；固定内容放在卡片前部，实际缓存收益取决于供应商。
+
 ## 开工时的能力预检
 
 原生 Codex / Claude 工作者首先读取自身 `.workflow-mailbox/inbox.json`，确认本次 assignment 及已读消息，然后提交 capabilities。先做这几步，再读取长指南和编写代码。控制器收到合法 outbox 和本次 assignment 的回执，才把文件消息通道记为已验证。默认限时 90 秒，受单次上限约束；runtime.worker 可用正整数 `worker_preflight_seconds` 调整。自定义 command 适配器需显式配置此字段才能启用强制预检及交接。
